@@ -7,6 +7,7 @@ use App\Models\UserFolderPermission;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
@@ -97,20 +98,30 @@ class PermissionFolderController extends Controller
             ], 403);
         }
 
+        DB::beginTransaction();
+
         try {
             $userFolderPermission = UserFolderPermission::where('user_id', $request->user_id)->where('folder_id', $request->folder_id)->first();
-            if (!$userFolderPermission) {
-                $userFolderPermission = UserFolderPermission::create([
-                    'user_id' => $request->user_id,
-                    'folder_id' => $request->folder_id,
-                    'permissions' => $request->permissions
-                ]);
-                
+
+            if ($userFolderPermission) {
                 return response()->json([
-                    'message' => 'Izin diberikan kepada user.'
-                ], 200);
+                    'errors' => 'User yang anda ingin berikan izin pada folder sudah terdapat izin sebelumnya.'
+                ], 409); // HTTP response konflik karena data perizinan user sudah ada sebelumnya.
             }
+
+            $userFolderPermission = UserFolderPermission::create([
+                'user_id' => $request->user_id,
+                'folder_id' => $request->folder_id,
+                'permissions' => $request->permissions
+            ]);
+            DB::commit();
+            
+            return response()->json([
+                'message' => 'Izin diberikan kepada user.'
+            ], 200);
         } catch (Exception $e) {
+            DB::rollBack();
+
             Log::error($e->getMessage());
             return response()->json([
                 'errors' => 'Terjadi kesalahan saat memberikan izin pada Folder ini.'
@@ -143,18 +154,30 @@ class PermissionFolderController extends Controller
             ], 403);
         }
 
+        DB::beginTransaction();
+
         try {
             $userFolderPermission = UserFolderPermission::where('user_id', $request->user_id)->where('folder_id', $request->folder_id)->first();
+
+            if(!$userFolderPermission){
+                return response()->json([
+                    'errors' => 'User yang ingin anda ganti perizinannya tidak terdaftar pada data perizinan. Gunakan API membuat perizinan folder untuk mengizinkan folder pada user.'
+                ], 404);
+            }
+
             // custom what permission to be revoked
             $userFolderPermission->permissions = array_diff($userFolderPermission->permissions, $request->permissions);
             $userFolderPermission->save();
+            DB::commit();
             
             return response()->json([
                 'message' => 'Izin diberikan kepada user.'
             ], 200);
            
         } catch (Exception $e) {
-            Log::error($e->getMessage());
+            DB::rollBack();
+
+            Log::error('Gagal mengubah perizinan folder: ' . $e->getMessage());
             return response()->json([
                 'errors' => 'Terjadi kesalahan saat mengubah izin pada Folder ini.'
             ], 500);
@@ -185,17 +208,27 @@ class PermissionFolderController extends Controller
             ], 403);
         }
 
+        DB::beginTransaction();
+
         try {
             $userFolderPermission = UserFolderPermission::where('user_id', $request->user_id)->where('folder_id', $request->folder_id)->first();
-            if ($userFolderPermission) {
-                $userFolderPermission->delete();
+
+            if (!$userFolderPermission) {
+                return response()->json([
+                    'errors' => 'User yang ingin anda hapus perizinannya tidak terdaftar pada data perizinan. Gunakan API membuat perizinan folder untuk mengizinkan folder pada user.'
+                ], 404);
             }
+
+            $userFolderPermission->delete();
+            DB::commit();
             
             return response()->json([
                 'message' => 'Semua izin sudah dihapus.'
             ], 200);
            
         } catch (Exception $e) {
+            DB::rollBack();
+
             Log::error($e->getMessage());
             return response()->json([
                 'errors' => 'Terjadi kesalahan saat menghapus semua izin user.'

@@ -12,7 +12,7 @@ Route::post('/login', [AuthController::class, 'login']); // login user
 
 Route::post('/checkTokenValid', [AuthController::class, 'checkTokenValid']); // TODO: periksa apakah token jwt masih valid atau tidak
 
-Route::post('/refreshToken', [AuthController::class, 'refresh'])->middleware('auth:api'); // TODO: refresh token jwt
+// Route::post('/refreshToken', [AuthController::class, 'refreshToken'])->middleware('auth:api'); // TODO: refresh token jwt
 
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:api');  // logout user
 

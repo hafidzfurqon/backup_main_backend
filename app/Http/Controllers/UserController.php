@@ -7,6 +7,7 @@ use App\Models\User;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
@@ -59,12 +60,18 @@ class UserController extends Controller
             ], 422);
         }
 
+        // MEMULAI TRANSACTION MYSQL
+        DB::beginTransaction();
+
         try {
             $user = User::create([
                 'name' => $request->name,
                 'email' => $request->email,
                 'password' => bcrypt($request->password),
             ]);
+
+            // COMMIT JIKA TIDAK ADA KESALAHAN
+            DB::commit();
 
             $roles = 'user';
             $user->assignRole($roles);
@@ -74,6 +81,9 @@ class UserController extends Controller
                 'data' => $user
             ], 201);
         } catch (Exception $e) {
+            // ROLLBACK JIKA ADA KESALAHAN
+            DB::rollBack();
+
             Log::error('Error occurred on registering user: ' . $e->getMessage());
             return response()->json([
                 'errors' => 'Terjadi kesalahan ketika mendaftarkan akun.',
@@ -152,18 +162,24 @@ class UserController extends Controller
             ], 422);
         }
 
+        DB::beginTransaction();
+
         try {
             $updatedUser = User::where('id', $user->id)->update([
                 'name' => $request->name,
                 'email' => $request->email,
                 'password' => bcrypt($request->password),
             ]);
+
+            DB::commit();
             
             return response()->json([
                 'message' => 'Data user berhasil diperbarui',
                 'data' => $updatedUser
             ], 200);
         } catch (Exception $e) {
+            DB::rollBack();
+
             Log::error('Error occurred on updating user: ' . $e->getMessage());
             return response()->json([
                 'errors' => 'Terjadi kesalahan ketika mengupdate data user.',
@@ -182,15 +198,20 @@ class UserController extends Controller
     {
         $user = Auth::user();
 
+        DB::beginTransaction();
+
         try {
             // Delete the user from the database.
             User::where('id', $user->id)->delete();
+            DB::commit();
 
             // Return a success response.
             return response()->json([
                 'message' => 'User berhasil di hapus'
             ], 200);
         } catch (Exception $e) {
+            DB::rollBack();
+            
             // Log the error if an exception occurs.
             Log::error('Error occurred on deleting user: ' . $e->getMessage());
 
