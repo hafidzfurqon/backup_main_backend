@@ -3,15 +3,20 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use Exception;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Tymon\JWTAuth\Facades\JWTAuth;
+use Tymon\JWTAuth\Exceptions\JWTException;
+use Tymon\JWTAuth\Exceptions\TokenExpiredException;
+use Tymon\JWTAuth\Exceptions\TokenInvalidException;
+use Tymon\JWTAuth\Exceptions\TokenBlacklistedException;
 
 class AuthController extends Controller
 {
+    // Fungsi untuk melakukan login dan mengeluarkan access token serta refresh token
     public function login(Request $request)
     {
         // Validasi input
@@ -36,10 +41,9 @@ class AuthController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        // Ambil "email" dan "password" dari input
-        $credentials = $request->only('email', 'password');
-
         try {
+            $credentials = $request->only('email', 'password');
+
             // Coba melakukan autentikasi
             $token = auth()->guard('api')->attempt($credentials);
 
@@ -56,9 +60,6 @@ class AuthController extends Controller
             $roles = $user->roles->pluck('name');
             $accessToken = $token;
 
-            // Simpan token JWT di cookie HTTP-only
-            // $cookie = Cookie::make('token', $token, 30, null, null, false, true);
-
             // Inisialisasi array respons
             $responseData = [
                 'accessToken' => $accessToken,
@@ -74,8 +75,8 @@ class AuthController extends Controller
             }
 
             // Kembalikan respons JSON dengan cookie
-            // return response()->json($responseData)->withCookie($cookie);
             return response()->json($responseData);
+            // return response()->json($responseData);
         } catch (\Exception $e) {
             Log::error('Login error: ' . $e->getMessage());
             return response()->json(['errors' => 'Terjadi kesalahan. Harap coba lagi nanti.'], 500);
@@ -85,55 +86,92 @@ class AuthController extends Controller
     public function checkTokenValid()
     {
         try {
+            $check = JWTAuth::parseToken()->authenticate();
 
-            $token = JWTAuth::getToken();
-
-            $checkToken = JWTAuth::checkOrFail($token);
-
-            if($checkToken) {
-                return response()->json(['token_valid' => true]);
+            if ($check) {
+                return response()->json([
+                    'token_valid' => true
+                ], 200); // HTTP 200 OK
             }
-
-        } catch (\Tymon\JWTAuth\Exceptions\TokenExpiredException $e) {
-            return response()->json(['token_valid' => false], 401);
-        } catch (\Tymon\JWTAuth\Exceptions\JWTException $e) {
-            return response()->json(['message' => 'Invalid token or token cannot be found'], 401);
+        } catch (Exception $e) {
+            if ($e instanceof \Tymon\JWTAuth\Exceptions\TokenInvalidException) {
+                return response()->json([
+                    'token_valid' => false,
+                    'errors' => 'Token is Invalid'
+                ], 401); // HTTP 401 Unauthorized
+            } else if ($e instanceof \Tymon\JWTAuth\Exceptions\TokenExpiredException) {
+                return response()->json([
+                    'token_valid' => false,
+                    'errors' => 'Token has Expired'
+                ], 401); // HTTP 401 Unauthorized
+            } else if ($e instanceof \Tymon\JWTAuth\Exceptions\TokenBlacklistedException) {
+                return response()->json([
+                    'token_valid' => false,
+                    'errors' => 'Token is Blacklisted'
+                ], 403); // HTTP 403 Forbidden
+            } else {
+                Log::error('Terjadi kesalahan ketika memeriksa token: ' . $e->getMessage());
+                return response()->json([
+                    'errors' => 'Terjadi kesalahan, harap coba lagi nanti'
+                ], 500); // HTTP 500 Internal Server Error
+            }
         }
     }
 
+    // TODO: Fungsi untuk me-refresh token
     // public function refreshToken(Request $request)
     // {
     //     try {
-    //         // 1. Dapatkan token dari cookie HTTP-Only
-    //         $token = $request->cookie('token');
-
-    //         if (!$token) {
-    //             return response()->json(['errors' => 'Token tidak ada.'], 401);
+    //         // Ambil access token dari header Authorization: Bearer {token}
+    //         $accessToken = $request->header('Authorization');
+    //         if (!$accessToken) {
+    //             return response()->json(['errors' => 'Access Token tidak ditemukan di header.'], 401); // 401 Unauthorized
+    //         }
+            
+    //         // Ambil refresh token dari cookie HTTP-Only
+    //         $refreshToken = $request->cookie('refresh_token');
+    //         if (!$refreshToken) {
+    //             return response()->json(['errors' => 'Refresh Token tidak ditemukan.'], 401); // 401 Unauthorized
     //         }
 
-    //         // 2. Refresh token menggunakan JWTAuth::refresh
-    //         $newToken = JWTAuth::refresh($token);
+    //         // Invalidate the old refresh token to prevent reuse
+    //         JWTAuth::setToken($refreshToken)->invalidate();
 
-    //         // 3. Kembalikan token yang sudah diperbarui melalui cookie HTTP-Only lagi
-    //         $cookie = Cookie::make('token', $newToken, 30, null, null, false, true); // Cookie berlaku 30 menit
+    //         // Refresh the access token and get a new one
+    //         $newAccessToken = JWTAuth::refresh($accessToken);
 
-    //         return response()->json(['success' => true])->withCookie($cookie);
-    //     } catch (\Exception $e) {
-    //         Log::error('Terjadi Error saat refresh token: ' . $e->getMessage());
-    //         return response()->json(['errors' => 'Terjadi kesalahan. Harap coba lagi nanti.'], 500);
+    //         // Create a new refresh token
+    //         $newRefreshToken = JWTAuth::fromUser(auth()->guard('api')->user());
+
+    //         // Set the new refresh token in a secure HTTP-Only cookie
+    //         $cookie = Cookie::make('refresh_token', $newRefreshToken, 10080, null, null, false, true); // 7 hari
+
+    //         return response()->json([
+    //             'accessToken' => $newAccessToken
+    //         ])->withCookie($cookie);
+    //     } catch (TokenExpiredException $e) {
+    //         return response()->json(['errors' => 'Access Token telah kadaluarsa.'], 401); // 401 Unauthorized
+    //     } catch (TokenInvalidException $e) {
+    //         return response()->json(['errors' => 'Access Token tidak valid.'], 401); // 401 Unauthorized
+    //     } catch (TokenBlacklistedException $e) {
+    //         return response()->json(['errors' => 'Refresh Token telah diblacklist.'], 403); // 403 Forbidden
+    //     } catch (JWTException $e) {
+    //         Log::error('Terjadi kesalahan saat mencoba me-refresh token: ' . $e->getMessage());
+    //         return response()->json(['errors' => 'Terjadi kesalahan, harap coba lagi nanti.'], 500); // 500 Internal Server Error
     //     }
     // }
 
+    // Fungsi untuk logout dan invalidate refresh token
     public function logout()
     {
         try {
+            // Invalidate both access and refresh tokens
             JWTAuth::invalidate(JWTAuth::getToken());
 
             return response()->json(['message' => 'Logout berhasil']);
-        } catch (\Exception $e) {
+        } catch (JWTException $e) {
             Log::error('Logout error: ' . $e->getMessage());
-
-            return response()->json(['errors' => 'Terjadi kesalahan ketika logout'], 500);
+            return response()->json(['errors' => 'Terjadi kesalahan ketika logout'], 500); // 500 Internal Server Error
         }
     }
 }

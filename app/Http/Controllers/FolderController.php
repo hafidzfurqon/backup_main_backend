@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Exception;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\DB;
 
 class FolderController extends Controller
 {
@@ -199,6 +200,9 @@ class FolderController extends Controller
             ], 422);
         }
 
+        // MEMULAI TRANSACTION MYSQL
+        DB::beginTransaction();
+
         try {
             $userId = Auth::id();
 
@@ -228,6 +232,9 @@ class FolderController extends Controller
                 'parent_id' => $parentId,
             ]);
 
+            // COMMIT JIKA TIDAK ADA ERROR
+            DB::commit();
+
             // Get NanoID folder
             $folderNameWithNanoId = $newFolder->nanoid;
 
@@ -244,6 +251,9 @@ class FolderController extends Controller
                 ]
             ], 201);
         } catch (Exception $e) {
+            // ROLLBACK JIKA ADA ERROR
+            DB::rollBack();
+
             Log::error('Error occurred on creating folder: ' . $e->getMessage(), [
                 'name' => $request->name,
                 'parentId' => $request->parent_id,
@@ -277,6 +287,8 @@ class FolderController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        DB::beginTransaction();
+
         try {
             $folder = Folder::findOrFail($id);
 
@@ -284,6 +296,8 @@ class FolderController extends Controller
             $oldNanoid = $folder->nanoid;
             $folder->name = $request->name;
             $folder->save();
+
+            DB::commit();
 
             // Update folder name in storage
             $path = $this->getFolderPath($folder->parent_id);
@@ -305,6 +319,8 @@ class FolderController extends Controller
                 'errors' => 'Folder tidak ditemukan.',
             ], 404);
         } catch (Exception $e) {
+            DB::rollBack();
+
             Log::error('Error occurred on updating folder name: ' . $e->getMessage(), [
                 'folderId' => $id,
                 'name' => $request->name,
@@ -329,11 +345,14 @@ class FolderController extends Controller
             ], 403);
         }
 
+        DB::beginTransaction();
+
         try {
             $folder = Folder::findOrFail($id);
 
             // Delete folder from database
             $folder->delete();
+            DB::commit();
 
             // Delete folder from storage
             $path = $this->getFolderPath($folder->parent_id);
@@ -351,6 +370,8 @@ class FolderController extends Controller
                 'errors' => 'Folder not found.',
             ], 404);
         } catch (Exception $e) {
+            DB::rollBack();
+
             Log::error('Error occurred on deleting folder: ' . $e->getMessage(), [
                 'folderId' => $id,
                 'trace' => $e->getTraceAsString(),
@@ -388,6 +409,8 @@ class FolderController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        DB::beginTransaction();
+
         try {
             $folder = Folder::findOrFail($request->folder_id);
             $oldParentId = $folder->parent_id;
@@ -403,6 +426,7 @@ class FolderController extends Controller
             }
             $folder->parent_id = $request->new_parent_id;
             $folder->save();
+            DB::commit();
 
             // Move folder in storage
             $oldPath = $this->getFolderPath($oldParentId);
@@ -425,6 +449,8 @@ class FolderController extends Controller
                 'errors' => 'Folder not found.',
             ], 404);
         } catch (Exception $e) {
+            DB::rollBack();
+            
             Log::error('Error occurred on moving folder: ' . $e->getMessage(), [
                 'folderId' => $request->folder_id,
                 'newParentId' => $request->new_parent_id,
