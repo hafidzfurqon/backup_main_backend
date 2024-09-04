@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 
 class UserController extends Controller
@@ -97,7 +98,7 @@ class UserController extends Controller
 
         try {
             $getUserData = User::where('id', $user->id)->first();
-            
+
             $getFolderRootId = Folder::where('user_id', $user->id)->first();
 
             $getUserData['folder_root_id'] = $getFolderRootId->id;
@@ -172,7 +173,7 @@ class UserController extends Controller
             ]);
 
             DB::commit();
-            
+
             return response()->json([
                 'message' => 'Data user berhasil diperbarui',
                 'data' => $updatedUser
@@ -201,24 +202,113 @@ class UserController extends Controller
         DB::beginTransaction();
 
         try {
-            // Delete the user from the database.
+            // Hapus folder dan file terkait dari local storage
+            $folders = Folder::where('user_id', $user->id)->get();
+            if(!$folders->isEmpty()){
+                foreach ($folders as $folder) {
+                    $this->deleteFolderAndFiles($folder);
+                }
+            }
+
+            // Hapus data pengguna dari database
             User::where('id', $user->id)->delete();
             DB::commit();
 
-            // Return a success response.
+            // Kembalikan respons sukses
             return response()->json([
-                'message' => 'User berhasil di hapus'
+                'message' => 'User berhasil dihapus'
             ], 200);
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             DB::rollBack();
-            
-            // Log the error if an exception occurs.
+
+            // Log error jika terjadi exception
             Log::error('Error occurred on deleting user: ' . $e->getMessage());
 
-            // Return an error response.
+            // Kembalikan respons error
             return response()->json([
                 'errors' => 'Terjadi kesalahan ketika menghapus user.',
             ], 500);
         }
+    }
+
+    /**
+     * Menghapus folder beserta file-file di dalamnya dari local storage
+     *
+     * @throws \Exception
+     */
+    private function deleteFolderAndFiles(Folder $folder)
+    {
+        DB::beginTransaction();
+
+        try {
+            // Hapus semua file dalam folder
+            $files = $folder->files;
+            foreach ($files as $file) {
+                try {
+                    // Hapus file dari storage
+                    Storage::delete($file->path);
+                    // Hapus data file dari database
+                    $file->delete();
+                    DB::commit();
+                } catch (\Exception $e) {
+                    DB::rollBack();
+                    Log::error('Error occurred while deleting file with ID ' . $file->id . ': ' . $e->getMessage());
+                    // Lemparkan kembali exception agar dapat ditangani di tingkat pemanggil
+                    throw $e;
+                }
+            }
+
+            // Hapus subfolder dan file dalam subfolder
+            $subfolders = $folder->subfolders;
+            foreach ($subfolders as $subfolder) {
+                $this->deleteFolderAndFiles($subfolder);
+            }
+
+            // Hapus folder dari storage
+            try {
+                $folderPath = $this->getFolderPath($folder->id);
+                if (Storage::exists($folderPath)) {
+                    Storage::deleteDirectory($folderPath);
+                }
+            } catch (\Exception $e) {
+                Log::error('Error occurred while deleting folder with ID ' . $folder->id . ': ' . $e->getMessage());
+                // Lemparkan kembali exception agar dapat ditangani di tingkat pemanggil
+                throw $e;
+            }
+
+            // Hapus data folder dari database
+            try {
+                $folder->delete();
+                DB::commit();
+            } catch (\Exception $e) {
+                DB::rollBack();
+                Log::error('Error occurred while deleting folder record with ID ' . $folder->id . ': ' . $e->getMessage());
+                // Lemparkan kembali exception agar dapat ditangani di tingkat pemanggil
+                throw $e;
+            }
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error occurred while processing folder with ID ' . $folder->id . ': ' . $e->getMessage());
+            // Lemparkan kembali exception agar dapat ditangani di tingkat pemanggil
+            throw $e;
+        }
+    }
+
+    /**
+     * Get folder path based on parent folder id.
+     */
+    private function getFolderPath($parentId)
+    {
+        if ($parentId === null) {
+            return ''; // Root directory, no need for 'folders' base path
+        }
+
+        $parentFolder = Folder::findOrFail($parentId);
+        $path = $this->getFolderPath($parentFolder->parent_id);
+
+        // Use the folder's NanoID in the storage path
+        $folderNameWithNanoId = $parentFolder->nanoid;
+
+        return $path . '/' . $folderNameWithNanoId;
     }
 }
