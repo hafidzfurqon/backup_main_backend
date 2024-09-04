@@ -62,6 +62,13 @@ class PermissionFolderController extends Controller
 
         try {
             $userFolderPermission = UserFolderPermission::where('user_id', $request->user_id)->where('folder_id', $request->folder_id)->first();
+
+            if(!$userFolderPermission){
+                return response()->json([
+                    'errors' => 'Tidak ada perizinan pada folder ini.'
+                ], 404);
+            }
+
             return response()->json([
                 'data' => $userFolderPermission
             ]);

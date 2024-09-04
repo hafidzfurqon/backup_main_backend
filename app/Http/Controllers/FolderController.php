@@ -164,7 +164,7 @@ class FolderController extends Controller
 
             return response()->json([
                 'data' => [
-                    'folder_root_info' => $folderResponse,
+                    'folder_info' => $folderResponse,
                     'subfolders' => $folder->subfolders,
                     'files' => $fileResponse,
                 ],
