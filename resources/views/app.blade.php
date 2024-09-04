@@ -8,8 +8,9 @@
         <title>FILE SHARING - Backend</title>
     </head>
     <body class="bg-[#141a21] text-white">
-        <div class="text-center content-center">
-            <h1>Testing..</h1>
+        <div class="text-center content-center min-h-screen max-w-lg mx-auto">
+            <h1 class="text-3xl mb-5">This is Rest API FOR <span class="text-green-500">KEMEKOPUKM</span></h1>
+            <p>Lorem ipsum dolor, sit amet consectetur adipisicing elit. Iusto, aspernatur temporibus doloribus voluptatem velit sed autem nam quod at amet?</p>
         </div>
     </body>
 </html>
