@@ -175,7 +175,7 @@ class FileController extends Controller
                 'name' => $originalFileName,
                 'path' => $path,
                 'size' => $fileSize,
-                'mime_type' => $mimeType, // MIME type yang sudah diambil sebelumnya
+                'mime_type' => 'png', // MIME type yang sudah diambil sebelumnya
                 'user_id' => $user->id,
                 'folder_id' => $folderId,
                 'nanoid' => $nanoid,
@@ -275,7 +275,7 @@ class FileController extends Controller
 
     /**
      * Delete a file (DELETE).
-     * DANGEROUS! 
+     * DANGEROUS!
      */
     public function delete($id)
     {
