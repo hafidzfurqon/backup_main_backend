@@ -24,6 +24,9 @@ class FileController extends Controller
         try {
             $file = File::findOrFail($id);
 
+            // Sembunyikan kolom 'path' dan 'nanoid'
+            $file->makeHidden(['path', 'nanoid']);
+
             // Generate file URL if it exists in public disk
             // $fileUrl = Storage::url($file->path);
 
@@ -47,6 +50,34 @@ class FileController extends Controller
             ], 500);
         }
     }
+
+    //disini, buatkan function yang mereturn semua file tanpa peduli dari folder tertentu, beserta total ukurannya
+    public function getAllFilesAndTotalSize()
+    {
+        $user = Auth::user();
+        try {
+            // Ambil semua file dari database
+            $files = File::where('user_id', $user->id)->get();
+
+            // Hitung total ukuran semua file
+            $totalSize = $files->sum('size');
+
+            $files->makeHidden(['path', 'nanoid']);
+
+            // Return daftar file dan total ukuran
+            return response()->json([
+                'data' => [
+                    'total_size' => $totalSize,
+                    'files' => $files,
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Terjadi kesalahan: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
 
     /**
      * Create a new text file (CREATE).
@@ -79,13 +110,15 @@ class FileController extends Controller
             $file = File::create([
                 'name' => $request->name,
                 'path' => $path,
-                'size' => $size,
+                'size' => $size, // Catatan: ukuran dalam satuan byte!
                 'mime_type' => 'text/plain', // Set tipe MIME untuk file teks
                 'user_id' => $request->user()->id,
                 'folder_id' => $request->folder_id,
             ]);
 
             DB::commit();
+
+            $file->makeHidden(['path', 'nanoid']);
 
             return response()->json([
                 'message' => 'File created and saved to storage successfully.',
@@ -129,9 +162,6 @@ class FileController extends Controller
             $originalFileName = $uploadedFile->getClientOriginalName(); // Nama asli file
             $fileExtension = $uploadedFile->getClientOriginalExtension(); // Ekstensi file
 
-            // Ambil MIME type segera setelah file diunggah
-            $mimeType = $uploadedFile->getMimeType();
-
             // Generate NanoID untuk nama file
             $nanoid = (new \Hidehalo\Nanoid\Client())->generateId();
             $storageFileName = $nanoid . '.' . $fileExtension;
@@ -174,8 +204,8 @@ class FileController extends Controller
             $file = File::create([
                 'name' => $originalFileName,
                 'path' => $path,
-                'size' => $fileSize,
-                'mime_type' => $mimeType, // MIME type yang sudah diambil sebelumnya
+                'size' => $fileSize, // Catatan: ukuran dalam satuan byte!
+                'type' => $fileExtension,
                 'user_id' => $user->id,
                 'folder_id' => $folderId,
                 'nanoid' => $nanoid,
@@ -190,6 +220,8 @@ class FileController extends Controller
                 'userId' => $user->id,
                 'folderId' => $folderId,
             ]);
+
+            $file->makeHidden(['path', 'nanoid']);
 
             return response()->json([
                 'message' => 'File uploaded successfully.',
@@ -251,6 +283,8 @@ class FileController extends Controller
 
             DB::commit();
 
+            $file->makeHidden(['path', 'nanoid']);
+
             return response()->json([
                 'message' => 'File name updated successfully.',
                 'data' => $file,
@@ -277,25 +311,39 @@ class FileController extends Controller
      * Delete a file (DELETE).
      * DANGEROUS! 
      */
-    public function delete($id)
+    public function delete(Request $request)
     {
+        $validator = Validator::make($request->all(), [
+            'file_ids' => 'required|array',
+            'file_ids.*' => 'integer|exists:files,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $fileIds = $request->file_ids;
+
         DB::beginTransaction();
 
         try {
-            $file = File::findOrFail($id);
+            foreach ($fileIds as $fileId) {
 
-            // Delete file from storage
-            if (Storage::exists($file->path)) {
-                Storage::delete($file->path);
+                $file = File::findOrFail($fileId);
+
+                // Delete file from storage
+                if (Storage::exists($file->path)) {
+                    Storage::delete($file->path);
+                }
+
+                // Delete file from database
+                $file->delete();
             }
-
-            // Delete file from database
-            $file->delete();
 
             DB::commit();
 
             return response()->json([
-                'message' => 'File deleted successfully.',
+                'message' => 'File(s) deleted successfully.',
             ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json([
@@ -305,7 +353,7 @@ class FileController extends Controller
             DB::rollBack();
 
             Log::error('Error occurred while deleting file: ' . $e->getMessage(), [
-                'fileId' => $id,
+                'fileId' => $fileIds,
                 'trace' => $e->getTraceAsString(),
             ]);
             return response()->json([
@@ -358,6 +406,8 @@ class FileController extends Controller
             $file->save();
 
             DB::commit();
+
+            $file->makeHidden(['path', 'nanoid']);
 
             return response()->json([
                 'message' => 'File moved successfully.',

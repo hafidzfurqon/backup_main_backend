@@ -62,9 +62,14 @@ class User extends Authenticatable implements JWTSubject
             // Buat folder root di database
             $folder = \App\Models\Folder::create([
                 'name' => $user->name . ' Main Folder',
+                'description' => 'Root Folder For ' . $user->name,
                 'user_id' => $user->id,
                 'parent_id' => null, // Folder root tidak memiliki parent
             ]);
+
+            $tag = Tags::where('name', 'Root')->first();
+
+            $folder->tags()->attach($tag->id);
 
             // Ambil nanoid dari folder yang baru dibuat
             $folderNanoid = $folder->nanoid;
@@ -110,5 +115,20 @@ class User extends Authenticatable implements JWTSubject
     {
         return $this->hasMany(UserFilePermission::class);
     }
+
+    // Relasi many-to-many dengan Instance
+    public function instances(): BelongsToMany
+    {
+        return $this->belongsToMany(Instance::class, 'user_has_instances')->withTimestamps();
+    }
+
+    // Tambahkan accessor untuk mengambil instansi terkait
+    public function getInstanceDataAttribute()
+    {
+        return $this->instances()->get();  // Mengambil semua instance yang terkait dengan user
+    }
+
+    // Append custom attribute `instance_data` ke model User
+    protected $appends = ['instance_data'];
     
 }

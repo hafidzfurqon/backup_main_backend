@@ -14,7 +14,6 @@ use Illuminate\Support\Facades\Storage;
 
 class AdminController extends Controller
 {
-
     // Informasi tentang akun Admin yang sedang login saat ini
     public function index()
     {
@@ -152,6 +151,7 @@ class AdminController extends Controller
             ],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
             'role' => ['required', 'string', 'exists:roles,name'],
+            'instance_id' => ['required', 'integer', 'exists:instances,id'],
         ]);
 
         if ($validator->fails()) {
@@ -170,6 +170,8 @@ class AdminController extends Controller
             ]);
 
             $newUser->assignRole($request->role);
+
+            $newUser->instances()->sync($request->instance_id);
 
             DB::commit();
 
@@ -234,6 +236,7 @@ class AdminController extends Controller
                 },
             ],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'instance_id' => ['required', 'integer', 'exists:instances,id'],
         ]);
 
         if ($validator->fails()) {
@@ -258,6 +261,17 @@ class AdminController extends Controller
                 'email' => $request->email,
                 'password' => bcrypt($request->password),
             ]);
+
+            // Perbarui instance user
+            $userToBeUpdated->instances()->sync($request->instance_id);
+
+            // Cari folder yang terkait dengan user
+            $userFolders = Folder::where('user_id', $userToBeUpdated->id)->get();
+
+            foreach ($userFolders as $folder) {
+                // Perbarui relasi instance pada setiap folder terkait
+                $folder->instances()->sync($request->instance_id);
+            }
 
             DB::commit();
 

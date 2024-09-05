@@ -3,6 +3,8 @@
 namespace Database\Seeders;
 
 use App\Models\Folder;
+use App\Models\Instance;
+use App\Models\Tags;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -23,6 +25,14 @@ class UserSeeder extends Seeder
             'password' => bcrypt('inmydream205'),
             'is_superadmin' => true
         ]);
+
+        $instance = Instance::where('name', 'KemenkopUKM')->first();
+
+        $folderUser = Folder::where('id', $adminSeeder->id)->whereNull('parent_id')->first();
+
+        $adminSeeder->instances()->attach($instance->id);
+
+        $folderUser->instances()->attach($instance->id);
 
         $adminRole = Role::where('name', 'admin')->first();
         
