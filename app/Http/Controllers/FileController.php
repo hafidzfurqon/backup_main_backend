@@ -144,9 +144,9 @@ class FileController extends Controller
     {
         $user = Auth::user();
 
-        // Validasi input
+        // Validasi input, mengubah 'file' menjadi array
         $validator = Validator::make($request->all(), [
-            'file' => 'required|file|mimes:jpg,jpeg,png,pdf,doc,docx,xlsx,txt,mp3,ogg,wav,aac,opus,mp4,hevc,mkv,mov,h264,h265,php,js,html,css',
+            'file.*' => 'required|file|mimes:jpg,jpeg,png,pdf,doc,docx,xlsx,txt,mp3,ogg,wav,aac,opus,mp4,hevc,mkv,mov,h264,h265,php,js,html,css',
             'folder_id' => 'nullable|integer|exists:folders,id',
         ]);
 
@@ -158,75 +158,79 @@ class FileController extends Controller
         DB::beginTransaction();
 
         try {
-            $uploadedFile = $request->file('file');
-            $originalFileName = $uploadedFile->getClientOriginalName(); // Nama asli file
-            $fileExtension = $uploadedFile->getClientOriginalExtension(); // Ekstensi file
+            $filesData = []; // Array untuk menyimpan data file yang berhasil diunggah
 
-            // Generate NanoID untuk nama file
-            $nanoid = (new \Hidehalo\Nanoid\Client())->generateId();
-            $storageFileName = $nanoid . '.' . $fileExtension;
+            foreach ($request->file('file') as $uploadedFile) {
+                $originalFileName = $uploadedFile->getClientOriginalName(); // Nama asli file
+                $fileExtension = $uploadedFile->getClientOriginalExtension(); // Ekstensi file
 
-            // Tentukan folder tujuan
-            $folderId = $request->folder_id ?? Folder::where('user_id', $user->id)->whereNull('parent_id')->first()->id;
+                // Generate NanoID untuk nama file
+                $nanoid = (new \Hidehalo\Nanoid\Client())->generateId();
+                $storageFileName = $nanoid . '.' . $fileExtension;
 
-            // Path sementara
-            $tempPath = storage_path('app/temp/' . $storageFileName);
-            $uploadedFile->move(storage_path('app/temp'), $storageFileName);
+                // Tentukan folder tujuan
+                $folderId = $request->folder_id ?? Folder::where('user_id', $user->id)->whereNull('parent_id')->first()->id;
 
-            // Pemindaian file dengan PHP Antimalware Scanner
-            $scanner = new Scanner();
-            $scanResult = $scanner->setPathScan($tempPath)->run();
+                // Path sementara
+                $tempPath = storage_path('app/temp/' . $storageFileName);
+                $uploadedFile->move(storage_path('app/temp'), $storageFileName);
 
-            if ($scanResult->detected >= 1) {
-                // Hapus file jika terdeteksi virus
+                // Pemindaian file dengan PHP Antimalware Scanner
+                $scanner = new Scanner();
+                $scanResult = $scanner->setPathScan($tempPath)->run();
+
+                if ($scanResult->detected >= 1) {
+                    // Hapus file jika terdeteksi virus
+                    if (file_exists($tempPath)) {
+                        unlink($tempPath);
+                    }
+                    DB::rollBack();
+                    return response()->json(['errors' => 'File berisi konten berbahaya. File otomatis dihapus'], 422);
+                }
+
+                // Pindahkan file yang telah discan ke storage utama
+                $path = $this->generateFilePath($folderId, $storageFileName);
+                Storage::put($path, file_get_contents($tempPath));
+
+                // Ambil ukuran file dari storage utama
+                $fileSize = Storage::size($path);
+
+                Log::info("File Temp: " . $tempPath);
+
+                // Hapus file sementara setelah dipindahkan
                 if (file_exists($tempPath)) {
                     unlink($tempPath);
                 }
-                DB::rollBack();
-                return response()->json(['errors' => 'File berisi konten berbahaya. File otomatis dihapus'], 422);
+
+                // Buat catatan file di database
+                $file = File::create([
+                    'name' => $originalFileName,
+                    'path' => $path,
+                    'size' => $fileSize, // Catatan: ukuran dalam satuan byte!
+                    'type' => $fileExtension,
+                    'user_id' => $user->id,
+                    'folder_id' => $folderId,
+                    'nanoid' => $nanoid,
+                ]);
+
+                $file->makeHidden(['path', 'nanoid']);
+
+                // Tambahkan file ke dalam array yang akan dikembalikan
+                $filesData[] = $file;
             }
-
-            // Pindahkan file yang telah discan ke storage utama
-            $path = $this->generateFilePath($folderId, $storageFileName);
-            Storage::put($path, file_get_contents($tempPath));
-
-            // Ambil ukuran file dari storage utama
-            $fileSize = Storage::size($path);
-
-            Log::info("File Temp: " . $tempPath);
-
-            // Hapus file sementara setelah dipindahkan
-            if (file_exists($tempPath)) {
-                unlink($tempPath);
-            }
-
-            // Buat catatan file di database
-            $file = File::create([
-                'name' => $originalFileName,
-                'path' => $path,
-                'size' => $fileSize, // Catatan: ukuran dalam satuan byte!
-                'type' => $fileExtension,
-                'user_id' => $user->id,
-                'folder_id' => $folderId,
-                'nanoid' => $nanoid,
-            ]);
 
             // COMMIT TRANSACTION JIKA TIDAK ADA ERROR
             DB::commit();
 
-            Log::info('File uploaded and scanned successfully.', [
-                'originalFileName' => $originalFileName,
-                'path' => $path,
+            Log::info('Files uploaded and scanned successfully.', [
                 'userId' => $user->id,
                 'folderId' => $folderId,
             ]);
 
-            $file->makeHidden(['path', 'nanoid']);
-
             return response()->json([
-                'message' => 'File uploaded successfully.',
+                'message' => 'Files uploaded successfully.',
                 'data' => [
-                    'file' => $file,
+                    'files' => $filesData,
                 ],
             ], 201);
         } catch (Exception $e) {
@@ -238,14 +242,14 @@ class FileController extends Controller
                 unlink($tempPath);
             }
 
-            Log::error('Error occurred while uploading file: ' . $e->getMessage(), [
+            Log::error('Error occurred while uploading files: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
                 'userId' => $user->id,
                 'folderId' => $request->input('folder_id', null),
             ]);
 
             return response()->json([
-                'errors' => 'An error occurred while uploading the file.',
+                'errors' => 'An error occurred while uploading the files.',
             ], 500);
         }
     }

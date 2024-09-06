@@ -3,8 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Tags;
+use App\Services\CheckAdminService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
@@ -13,20 +13,17 @@ use Illuminate\Validation\Rule;
 class TagController extends Controller
 {
 
-    private function checkAdmin()
-    {
-        $user = Auth::user();
+    protected $checkAdminService;
 
-        if ($user->hasRole('admin') || ($user->hasRole('admin') && $user->is_superadmin == 1)) {
-            return true;
-        } else {
-            return false;
-        }
+    // Inject RoleService ke dalam constructor
+    private function __construct(CheckAdminService $checkAdminService)
+    {
+        $this->checkAdminService = $checkAdminService;
     }
 
     public function index(Request $request)
     {
-        $checkAdmin = $this->checkAdmin();
+        $checkAdmin = $this->checkAdminService->checkAdmin();
 
         if (!$checkAdmin) {
             return response()->json([
@@ -58,7 +55,7 @@ class TagController extends Controller
 
     public function getTagsId(Request $request)
     {
-        $checkAdmin = $this->checkAdmin();
+        $checkAdmin = $this->checkAdminService->checkAdmin();
 
         if (!$checkAdmin) {
             return response()->json([
@@ -95,7 +92,7 @@ class TagController extends Controller
 
     public function store(Request $request)
     {
-        $checkAdmin = $this->checkAdmin();
+        $checkAdmin = $this->checkAdminService->checkAdmin();
 
         if (!$checkAdmin) {
             return response()->json([
@@ -143,7 +140,7 @@ class TagController extends Controller
 
     public function update(Request $request, $id)
     {
-        $checkAdmin = $this->checkAdmin();
+        $checkAdmin = $this->checkAdminService->checkAdmin();
 
         if (!$checkAdmin) {
             return response()->json([
@@ -201,7 +198,7 @@ class TagController extends Controller
 
     public function destroy(Request $request)
     {
-        $checkAdmin = $this->checkAdmin();
+        $checkAdmin = $this->checkAdminService->checkAdmin();
 
         if (!$checkAdmin) {
             return response()->json([

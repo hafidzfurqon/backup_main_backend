@@ -259,11 +259,7 @@ class FolderController extends Controller
                 $fileResponse = []; // Jika tidak ada file, kembalikan array kosong
             } else {
                 foreach ($files as $file) {
-                    $fileResponse[] = [
-                        'id' => $file->id,
-                        'name' => $file->name,
-                        'folder_id' => $folder->id,
-                    ];
+                    $fileResponse[] = $file;
                 }
             }
 

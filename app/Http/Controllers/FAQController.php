@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\FAQ;
+use App\Services\CheckAdminService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -11,21 +12,17 @@ use Illuminate\Support\Facades\Validator;
 
 class FAQController extends Controller
 {
-    private function checkAdmin()
+    protected $checkAdminService;
+
+    // Inject RoleService ke dalam constructor
+    private function __construct(CheckAdminService $checkAdminService)
     {
-        $user = Auth::user();
-
-        if($user->hasRole('admin') || ($user->hasRole('admin') && $user->is_superadmin == 1)) {
-            return true;
-        } else {
-            return false;
-        }
-
+        $this->checkAdminService = $checkAdminService;
     }
 
     public function index()
     {
-        $checkAdmin = $this->checkAdmin();
+        $checkAdmin = $this->checkAdminService->checkAdmin();
 
         if(!$checkAdmin) {
             return response()->json([
@@ -56,7 +53,7 @@ class FAQController extends Controller
 
     public function store(Request $request)
     {
-        $checkAdmin = $this->checkAdmin();
+        $checkAdmin = $this->checkAdminService->checkAdmin();
 
         if(!$checkAdmin) {
             return response()->json([
@@ -106,7 +103,7 @@ class FAQController extends Controller
 
     public function update(Request $request, $id)
     {
-        $checkAdmin = $this->checkAdmin();
+        $checkAdmin = $this->checkAdminService->checkAdmin();
 
         if(!$checkAdmin) {
             return response()->json([
@@ -161,7 +158,7 @@ class FAQController extends Controller
 
     public function destroy($id)
     {
-        $checkAdmin = $this->checkAdmin();
+        $checkAdmin = $this->checkAdminService->checkAdmin();
 
         if(!$checkAdmin) {
             return response()->json([

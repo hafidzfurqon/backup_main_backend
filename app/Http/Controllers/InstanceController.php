@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Instance;
+use App\Services\CheckAdminService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -11,20 +12,12 @@ use Illuminate\Support\Facades\Validator;
 
 class InstanceController extends Controller
 {
-    /**
-     * Check if the user is an admin or a superadmin.
-     *
-     * @return boolean
-     */
-    private function checkAdmin()
-    {
-        $user = Auth::user();
+    protected $checkAdminService;
 
-        if ($user->hasRole('admin') || ($user->hasRole('admin') && $user->is_superadmin == 1)) {
-            return true;
-        } else {
-            return false;
-        }
+    // Inject RoleService ke dalam constructor
+    private function __construct(CheckAdminService $checkAdminService)
+    {
+        $this->checkAdminService = $checkAdminService;
     }
 
     /**
@@ -37,7 +30,7 @@ class InstanceController extends Controller
      */
     public function index(Request $request)
     {
-        $checkAdmin = $this->checkAdmin();
+        $checkAdmin = $this->checkAdminService->checkAdmin();
 
         if (!$checkAdmin) {
             return response()->json([
@@ -83,7 +76,7 @@ class InstanceController extends Controller
      */
     public function getInstanceIdWithName(Request $request)
     {
-        $checkAdmin = $this->checkAdmin();
+        $checkAdmin = $this->checkAdminService->checkAdmin();
 
         if (!$checkAdmin) {
             return response()->json([
@@ -125,7 +118,7 @@ class InstanceController extends Controller
      */
     public function store(Request $request)
     {
-        $checkAdmin = $this->checkAdmin();
+        $checkAdmin = $this->checkAdminService->checkAdmin();
 
         if (!$checkAdmin) {
             return response()->json([
@@ -182,7 +175,7 @@ class InstanceController extends Controller
      */
     public function update(Request $request, $id)
     {
-        $checkAdmin = $this->checkAdmin();
+        $checkAdmin = $this->checkAdminService->checkAdmin();
 
         if (!$checkAdmin) {
             return response()->json([
@@ -249,7 +242,7 @@ class InstanceController extends Controller
      */
     public function destroy(Request $request)
     {
-        $checkAdmin = $this->checkAdmin();
+        $checkAdmin = $this->checkAdminService->checkAdmin();
 
         if (!$checkAdmin) {
             return response()->json([
