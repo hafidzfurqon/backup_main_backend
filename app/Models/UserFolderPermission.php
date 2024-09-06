@@ -14,10 +14,6 @@ class UserFolderPermission extends Model
         'user_id', 'folder_id', 'permissions'
     ];
 
-    protected $casts = [
-        'permissions' => 'array', // Secara otomatis meng-cast JSON ke array
-    ];
-
     public function users(): BelongsTo
     {
         return $this->belongsTo(User::class);

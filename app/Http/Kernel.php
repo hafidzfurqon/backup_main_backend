@@ -69,5 +69,6 @@ class Kernel extends HttpKernel
         'check_admin' => \App\Http\Middleware\Custom\CheckAdmin::class,
         'validate_admin' => \App\Http\Middleware\Custom\ValidateAdmin::class,
         'hide_superadmin_flag' => \App\Http\Middleware\Custom\HideSuperadminFlag::class,
+        'check_storage_limit' => \App\Http\Middleware\Custom\CheckStorageLimit::class,
     ];
 }

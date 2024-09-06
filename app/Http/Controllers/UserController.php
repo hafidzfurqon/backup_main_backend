@@ -14,83 +14,83 @@ use Illuminate\Support\Facades\Validator;
 
 class UserController extends Controller
 {
-    public function register(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'name' => ['required', 'string', 'max:100'],
-            'email' => [
-                'required',
-                'email',
-                'unique:users,email', // Menentukan kolom yang dicek di tabel users
-                function ($attribute, $value, $fail) {
-                    // Validasi format email menggunakan Laravel's 'email' rule
-                    if (!preg_match('/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,})+$/', $value)) {
-                        $fail('Format email tidak valid.');
-                    }
+    // public function register(Request $request)
+    // {
+    //     $validator = Validator::make($request->all(), [
+    //         'name' => ['required', 'string', 'max:100'],
+    //         'email' => [
+    //             'required',
+    //             'email',
+    //             'unique:users,email', // Menentukan kolom yang dicek di tabel users
+    //             function ($attribute, $value, $fail) {
+    //                 // Validasi format email menggunakan Laravel's 'email' rule
+    //                 if (!preg_match('/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,})+$/', $value)) {
+    //                     $fail('Format email tidak valid.');
+    //                 }
 
-                    // Daftar domain yang valid
-                    $allowedDomains = [
-                        'outlook.com',
-                        'yahoo.com',
-                        'aol.com',
-                        'lycos.com',
-                        'mail.com',
-                        'icloud.com',
-                        'yandex.com',
-                        'protonmail.com',
-                        'tutanota.com',
-                        'zoho.com',
-                        'gmail.com'
-                    ];
+    //                 // Daftar domain yang valid
+    //                 $allowedDomains = [
+    //                     'outlook.com',
+    //                     'yahoo.com',
+    //                     'aol.com',
+    //                     'lycos.com',
+    //                     'mail.com',
+    //                     'icloud.com',
+    //                     'yandex.com',
+    //                     'protonmail.com',
+    //                     'tutanota.com',
+    //                     'zoho.com',
+    //                     'gmail.com'
+    //                 ];
 
-                    // Ambil domain dari alamat email
-                    $domain = strtolower(substr(strrchr($value, '@'), 1));
+    //                 // Ambil domain dari alamat email
+    //                 $domain = strtolower(substr(strrchr($value, '@'), 1));
 
-                    // Periksa apakah domain email diizinkan
-                    if (!in_array($domain, $allowedDomains)) {
-                        $fail('Domain email tidak valid.');
-                    }
-                },
-            ],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
-        ]);
+    //                 // Periksa apakah domain email diizinkan
+    //                 if (!in_array($domain, $allowedDomains)) {
+    //                     $fail('Domain email tidak valid.');
+    //                 }
+    //             },
+    //         ],
+    //         'password' => ['required', 'string', 'min:8', 'confirmed'],
+    //     ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'errors' => $validator->errors()
-            ], 422);
-        }
+    //     if ($validator->fails()) {
+    //         return response()->json([
+    //             'errors' => $validator->errors()
+    //         ], 422);
+    //     }
 
-        // MEMULAI TRANSACTION MYSQL
-        DB::beginTransaction();
+    //     // MEMULAI TRANSACTION MYSQL
+    //     DB::beginTransaction();
 
-        try {
-            $user = User::create([
-                'name' => $request->name,
-                'email' => $request->email,
-                'password' => bcrypt($request->password),
-            ]);
+    //     try {
+    //         $user = User::create([
+    //             'name' => $request->name,
+    //             'email' => $request->email,
+    //             'password' => bcrypt($request->password),
+    //         ]);
 
-            // COMMIT JIKA TIDAK ADA KESALAHAN
-            DB::commit();
+    //         // COMMIT JIKA TIDAK ADA KESALAHAN
+    //         DB::commit();
 
-            $roles = 'user';
-            $user->assignRole($roles);
+    //         $roles = 'user';
+    //         $user->assignRole($roles);
 
-            return response()->json([
-                'message' => 'Berhasil Mendaftarkan Akun!',
-                'data' => $user
-            ], 201);
-        } catch (Exception $e) {
-            // ROLLBACK JIKA ADA KESALAHAN
-            DB::rollBack();
+    //         return response()->json([
+    //             'message' => 'Berhasil Mendaftarkan Akun!',
+    //             'data' => $user
+    //         ], 201);
+    //     } catch (Exception $e) {
+    //         // ROLLBACK JIKA ADA KESALAHAN
+    //         DB::rollBack();
 
-            Log::error('Error occurred on registering user: ' . $e->getMessage());
-            return response()->json([
-                'errors' => 'Terjadi kesalahan ketika mendaftarkan akun.',
-            ], 500);
-        }
-    }
+    //         Log::error('Error occurred on registering user: ' . $e->getMessage());
+    //         return response()->json([
+    //             'errors' => 'Terjadi kesalahan ketika mendaftarkan akun.',
+    //         ], 500);
+    //     }
+    // }
 
     public function index()
     {
@@ -155,6 +155,7 @@ class UserController extends Controller
                 },
             ],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'instance_id' => ['required', 'exists:instances,id'],
         ]);
 
         if ($validator->fails()) {
@@ -171,6 +172,8 @@ class UserController extends Controller
                 'email' => $request->email,
                 'password' => bcrypt($request->password),
             ]);
+
+            $updatedUser->instances()->sync($request->instance_id);
 
             DB::commit();
 
@@ -211,7 +214,11 @@ class UserController extends Controller
             }
 
             // Hapus data pengguna dari database
-            User::where('id', $user->id)->delete();
+            $userData = User::where('id', $user->id);
+
+            $userData->instances()->detach();
+            $userData->delete();
+
             DB::commit();
 
             // Kembalikan respons sukses

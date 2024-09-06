@@ -6,6 +6,7 @@ use App\Casts\HashId;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Folder extends Model
 {
@@ -14,6 +15,8 @@ class Folder extends Model
     protected $fillable = [
         'nanoid',
         'name',
+        'description',
+        'type',
         'user_id',
         'parent_id'
     ];
@@ -26,7 +29,11 @@ class Folder extends Model
         static::creating(function ($model) {
             if (empty($model->nanoid)) {
                 $model->nanoid = self::generateNanoId();
-            }
+            };
+
+            if (empty($model->type)) {
+                $model->type = 'folder';
+            };
         });
     }
 
@@ -59,4 +66,16 @@ class Folder extends Model
     {
         return $this->hasMany(UserFolderPermission::class);
     }
+
+    // Add this method to define the many-to-many relationship with tags
+    public function tags(): BelongsToMany
+    {
+        return $this->belongsToMany(Tags::class, 'folder_has_tags')->withTimestamps(); // menggunakan tabel pivot untuk menyalakan otomatisasi timestamp().
+    }
+
+     // Relasi many-to-many dengan InstanceModel
+     public function instances(): BelongsToMany
+     {
+         return $this->belongsToMany(Instance::class, 'folder_has_instances')->withTimestamps(); // menggunakan tabel pivot untuk menyalakan otomatisasi timestamp().
+     }
 }
