@@ -96,7 +96,7 @@ Route::middleware(['auth:api', 'validate_admin'])->group(function () {
 
         Route::prefix('instansi')->group(function () {
             Route::get('/', [InstanceController::class, 'index']); // dapatkan semua list instansi yang ada
-            Route::post('/instance', [InstanceController::class, 'getInstanceWithName']); // Mendapatkan daftar ID instansi berdasarkan nama (contoh: /instance?name=instansi)
+            Route::post('/cari', [InstanceController::class, 'getInstanceWithName']); // Mendapatkan daftar ID instansi berdasarkan nama (contoh: /instance?name=instansi)
             Route::post('/create', [InstanceController::class, 'store']); // Membuat instansi baru
             Route::put('/update/{id}', [InstanceController::class, 'update']); // Update instansi yang ada sebelumnya
             Route::post('/delete', [InstanceController::class, 'destroy']); // Hapus instansi yang ada sebelumnya dengan array request body

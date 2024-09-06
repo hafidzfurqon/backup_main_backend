@@ -11,7 +11,7 @@ class NewsController extends Controller
     protected $checkAdminService;
 
     // Inject RoleService ke dalam constructor
-    private function __construct(CheckAdminService $checkAdminService)
+    public function __construct(CheckAdminService $checkAdminService)
     {
         $this->checkAdminService = $checkAdminService;
     }
