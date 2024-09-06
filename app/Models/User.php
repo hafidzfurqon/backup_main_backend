@@ -106,14 +106,19 @@ class User extends Authenticatable implements JWTSubject
     }
 
     // relasi perizinan
-    public function folderPermissions()
+    public function folderPermissions(): HasMany
     {
         return $this->hasMany(UserFolderPermission::class);
     }
 
-    public function filePermissions()
+    public function filePermissions(): HasMany
     {
         return $this->hasMany(UserFilePermission::class);
+    }
+
+    public function news(): HasMany
+    {
+        return $this->hasMany(News::class);
     }
 
     // Relasi many-to-many dengan Instance
