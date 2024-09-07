@@ -15,7 +15,6 @@ return new class extends Migration
             $table->id();
             $table->string('nanoid');
             $table->string('name');
-            $table->string('description');
             $table->string('type');
             $table->foreignId('user_id')->references('id')->on('users')->cascadeOnDelete();
             $table->foreignId('parent_id')->nullable()->references('id')->on('folders')->cascadeOnDelete();

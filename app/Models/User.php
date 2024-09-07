@@ -62,7 +62,6 @@ class User extends Authenticatable implements JWTSubject
             // Buat folder root di database
             $folder = \App\Models\Folder::create([
                 'name' => $user->name . ' Main Folder',
-                'description' => 'Root Folder For ' . $user->name,
                 'user_id' => $user->id,
                 'parent_id' => null, // Folder root tidak memiliki parent
             ]);

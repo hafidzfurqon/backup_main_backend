@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use AMWScan\Scanner;
+use App\Models\Tags;
+use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -22,7 +24,13 @@ class FileController extends Controller
     public function info($id)
     {
         try {
-            $file = File::findOrFail($id);
+            $file = File::with(['tags', 'instances'])->find($id);
+
+            if (!$file) {
+                return response()->json([
+                    'errors' => 'File not found',
+                ], 404);
+            }
 
             // Sembunyikan kolom 'path' dan 'nanoid'
             $file->makeHidden(['path', 'nanoid']);
@@ -36,10 +44,6 @@ class FileController extends Controller
                     // 'fileUrl' => $fileUrl, // Add file URL to the response
                 ],
             ], 200);
-        } catch (ModelNotFoundException $e) {
-            return response()->json([
-                'errors' => 'File not found.',
-            ], 404);
         } catch (Exception $e) {
             Log::error('Error encountered while fetching file info: ', [
                 'fileId' => $id,
@@ -51,13 +55,13 @@ class FileController extends Controller
         }
     }
 
-    //disini, buatkan function yang mereturn semua file tanpa peduli dari folder tertentu, beserta total ukurannya
+    // dapatkan semua file dan total filenya
     public function getAllFilesAndTotalSize()
     {
         $user = Auth::user();
         try {
             // Ambil semua file dari database
-            $files = File::where('user_id', $user->id)->get();
+            $files = File::where('user_id', $user->id)->with(['tags', 'instances'])->get();
 
             // Hitung total ukuran semua file
             $totalSize = $files->sum('size');
@@ -72,8 +76,11 @@ class FileController extends Controller
                 ],
             ], 200);
         } catch (\Exception $e) {
+
+            Log::error('An error occurred while fetching all files and total size: ' . $e->getMessage());
+
             return response()->json([
-                'error' => 'Terjadi kesalahan: ' . $e->getMessage(),
+                'error' => 'An error occurred while fetching all files and total size.'
             ], 500);
         }
     }
@@ -84,10 +91,14 @@ class FileController extends Controller
      */
     public function create(Request $request)
     {
+        $userId = Auth::id();
+
         $validator = Validator::make($request->all(), [
             'name' => 'required|string',  // Nama file yang akan dibuat
             'content' => 'nullable|string', // Konten file, bisa kosong
             'folder_id' => 'nullable|integer|exists:folders,id',
+            'tags' => 'nullable|array',
+            'tags.*' => ['string', 'regex:/^[a-zA-Z\s]+$/'],
         ]);
 
         if ($validator->fails()) {
@@ -116,9 +127,44 @@ class FileController extends Controller
                 'folder_id' => $request->folder_id,
             ]);
 
+            $userData = User::where('id', $userId)->first();
+
+            $userInstance = $userData->instances->pluck('id')->toArray();  // Mengambil instance user
+            $file->instances()->sync($userInstance);  // Sinkronisasi instance ke folder baru
+
+            if ($request->tags) {
+                // Proses tags
+                $tagIds = [];
+
+                foreach ($request->tags as $tagName) {
+                    // Periksa apakah tag sudah ada di database (case-insensitive)
+                    $tag = Tags::whereRaw('LOWER(name) = ?', [strtolower($tagName)])->first();
+
+                    if (!$tag) {
+                        // Jika tag belum ada, buat tag baru
+                        $tag = Tags::create(['name' => ucfirst($tagName)]);
+                    }
+
+                    // Ambil id dari tag (baik yang sudah ada atau baru dibuat)
+                    $tagIds[] = $tag->id;
+
+                    // Masukkan id dan name dari tag ke dalam array untuk response
+                    $tagsData[] = [
+                        'id' => $tag->id,
+                        'name' => $tag->name
+                    ];
+                }
+
+                $file->tags()->sync($tagIds);
+            }
+
             DB::commit();
 
             $file->makeHidden(['path', 'nanoid']);
+
+            $file['tags'] = $tagsData;
+
+            $file->load('instances');
 
             return response()->json([
                 'message' => 'File created and saved to storage successfully.',
@@ -146,8 +192,11 @@ class FileController extends Controller
 
         // Validasi input, mengubah 'file' menjadi array
         $validator = Validator::make($request->all(), [
+            'file' => 'required|array',
             'file.*' => 'required|file|mimes:jpg,jpeg,png,pdf,doc,docx,xlsx,txt,mp3,ogg,wav,aac,opus,mp4,hevc,mkv,mov,h264,h265,php,js,html,css',
             'folder_id' => 'nullable|integer|exists:folders,id',
+            'tags' => 'nullable|array',
+            'tags.*' => ['string', 'regex:/^[a-zA-Z\s]+$/'],
         ]);
 
         if ($validator->fails()) {
@@ -159,6 +208,9 @@ class FileController extends Controller
 
         try {
             $filesData = []; // Array untuk menyimpan data file yang berhasil diunggah
+
+            $userData = User::where('id', $user->id)->first();
+            $userInstances = $userData->instances->pluck('id')->toArray();  // Mengambil instance user
 
             foreach ($request->file('file') as $uploadedFile) {
                 $originalFileName = $uploadedFile->getClientOriginalName(); // Nama asli file
@@ -213,7 +265,39 @@ class FileController extends Controller
                     'nanoid' => $nanoid,
                 ]);
 
+                $file->instances()->sync($userInstances);
+
+                if ($request->tags) {
+                    // Proses tags
+                    $tagIds = [];
+
+                    foreach ($request->tags as $tagName) {
+                        // Periksa apakah tag sudah ada di database (case-insensitive)
+                        $tag = Tags::whereRaw('LOWER(name) = ?', [strtolower($tagName)])->first();
+
+                        if (!$tag) {
+                            // Jika tag belum ada, buat tag baru
+                            $tag = Tags::create(['name' => ucfirst($tagName)]);
+                        }
+
+                        // Ambil id dari tag (baik yang sudah ada atau baru dibuat)
+                        $tagIds[] = $tag->id;
+
+                        // Masukkan id dan name dari tag ke dalam array untuk response
+                        $tagsData[] = [
+                            'id' => $tag->id,
+                            'name' => $tag->name
+                        ];
+                    }
+
+                    $file->tags()->sync($tagIds);
+
+                    $file['tags'] = $tagsData;
+                }
+
                 $file->makeHidden(['path', 'nanoid']);
+
+                $file->load('instances');
 
                 // Tambahkan file ke dalam array yang akan dikembalikan
                 $filesData[] = $file;
@@ -245,7 +329,7 @@ class FileController extends Controller
             Log::error('Error occurred while uploading files: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
                 'userId' => $user->id,
-                'folderId' => $request->input('folder_id', null),
+                'fileId' => $request->input('file_id', null),
             ]);
 
             return response()->json([
@@ -255,9 +339,148 @@ class FileController extends Controller
     }
 
     /**
+     * Add a tag to a file.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function addTagToFile(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'file_id' => 'required|integer|exists:files,id',
+            'tag_id' => 'required|integer|exists:tags,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        // Periksa perizinan
+        // $permissionCheck = $this->checkPermissionFolder($request->folder_id, 'folder_edit');
+        // if (!$permissionCheck) {
+        //     return response()->json([
+        //         'errors' => 'You do not have permission to add tag to this folder.',
+        //     ], 403);
+        // }
+
+        DB::beginTransaction();
+
+        try {
+            $file = File::findOrFail($request->file_id);
+            $tag = Tags::findOrFail($request->tag_id);
+
+            // Memeriksa apakah tag sudah terkait dengan file
+            if ($file->tags->contains($tag->id)) {
+                return response()->json([
+                    'errors' => 'Tag already exists in folder.'
+                ], 409);
+            }
+
+            // Menambahkan tag ke file (tabel pivot file_has_tags)
+            $file->tags()->attach($tag->id);
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Successfully added tag to file.',
+                'data' => [
+                    'file_id' => $file->id,
+                    'file_name' => $file->name,
+                    'tag_id' => $tag->id,
+                    'tag_name' => $tag->name
+                ]
+            ], 200);
+        } catch (ModelNotFoundException $e) {
+
+            DB::rollBack();
+
+            return response()->json([
+                'errors' => 'File or tag not found.'
+            ], 404);
+        } catch (Exception $e) {
+
+            DB::rollBack();
+
+            Log::error('Error occurred on adding tag to file: ' . $e->getMessage(), [
+                'file_id' => $request->file_id,
+                'tag_id' => $request->tag_id,
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'errors' => 'An error occurred on adding tag to file.'
+            ], 500);
+        }
+    }
+
+    /**
+     * Remove a tag from a file
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function removeTagFromFile(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'file_id' => 'required|integer|exists:files,id',
+            'tag_id' => 'required|integer|exists:tags,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        DB::beginTransaction();
+
+        try {
+            $file = File::findOrFail($request->file_id);
+            $tag = Tags::findOrFail($request->tag_id);
+
+            // Memeriksa apakah tag terkait dengan file
+            if (!$file->tags->contains($tag->id)) {
+                return response()->json([
+                    'errors' => 'Tag not found in file.'
+                ], 404);
+            }
+
+            // Menghapus tag dari file (tabel pivot file_has_tags)
+            $file->tags()->detach($tag->id);
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Successfully removed tag from file.',
+                'data' => [
+                    'file' => $file
+                ]
+            ], 200);
+        } catch (ModelNotFoundException $e) {
+
+            DB::rollBack();
+
+            return response()->json([
+                'errors' => 'File or tag not found.'
+            ], 404);
+        } catch (Exception $e) {
+
+            DB::rollBack();
+
+            Log::error('Error occurred on removing tag from file: ' . $e->getMessage(), [
+                'file_id' => $request->file_id,
+                'tag_id' => $request->tag_id,
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'errors' => 'An error occurred on removing tag from file.'
+            ], 500);
+        }
+    }
+
+    /**
      * Update the name of a file.
      */
-    public function updateFileName(Request $request, $id)
+    public function updateFile(Request $request, $id)
     {
         $validator = Validator::make($request->all(), [
             'name' => 'required|string',
@@ -339,6 +562,11 @@ class FileController extends Controller
                 if (Storage::exists($file->path)) {
                     Storage::delete($file->path);
                 }
+
+                // Hapus data pivot yang terkait dengan file (tags dan instances)
+                $file->tags()->detach(); // Menghapus semua data pivot pada tabel file_has_tags
+                $file->instances()->detach(); // Menghapus semua data pivot pada tabel file_has_instances
+
 
                 // Delete file from database
                 $file->delete();

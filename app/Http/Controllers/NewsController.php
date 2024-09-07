@@ -49,7 +49,7 @@ class NewsController extends Controller
         }
     }
 
-    public function getAllNewsForPublic(Request $request)
+    public function getAllNewsForPublic()
     {
         try {
             // Ambil semua data berita beserta nama pembuat dan tag-nya, dengan pagination 10 item per halaman
@@ -80,4 +80,6 @@ class NewsController extends Controller
             ], 500);
         }
     }
+
+
 }

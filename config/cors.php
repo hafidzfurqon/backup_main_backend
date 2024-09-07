@@ -19,7 +19,7 @@ return [
 
     'allowed_methods' => ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 
-    'allowed_origins' => ['http://127.0.0.1:8000'],
+    'allowed_origins' => ['http://localhost:3032', 'http://127.0.0.1:8000'],
 
     // Menggunakan REGEX untuk pola pattern localhost dengan segala macam portnya :(
     'allowed_origins_patterns' => ['^http://localhost:\d+$'],

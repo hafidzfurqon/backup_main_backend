@@ -2,48 +2,47 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Folder;
-use App\Models\UserFolderPermission;
-use Exception;
+use App\Models\File;
+use App\Models\UserFilePermission;
 use Illuminate\Http\Request;
+use Exception;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
-class PermissionFolderController extends Controller
+class PermissionFileController extends Controller
 {
-
     /**
      * Check the user permission
      */
-    private function checkPermission($folderId)
+    private function checkPermission($fileId)
     {
         $user = Auth::user();
-        $folder = Folder::find($folderId);
+        $file = File::find($fileId);
 
-        // If folder not found, return 404 error and stop the process
-        if (!$folder) {
+        // If file not found, return 404 error and stop the process
+        if (!$file) {
             return response()->json([
-                'errors' => 'Folder with Folder ID you entered not found, Please check your Folder ID and try again.'
+                'errors' => 'file dengan file ID yang anda masukan tidak ditemukan, Silahkan periksa kembali file ID yang anda masukan.'
             ], 404); // Setting status code to 404 Not Found
         }
 
-        // Step 1: Check if the folder belongs to the logged-in user
-        if ($folder->user_id === $user->id) {
+        // Step 1: Check if the file belongs to the logged-in user
+        if ($file->user_id === $user->id) {
             return true; // The owner has all permissions
         }
 
         return false;
     }
 
-    public function getAllPermissionOnFolder(Request $request)
+    public function getAllPermissionOnFile(Request $request)
     {
         // Validasi request
         $validator = Validator::make(
             $request->all(),
             [
-                'folder_id' => 'required|integer|exists:folders,id',
+                'file_id' => 'required|integer|exists:files,id',
             ]
         );
 
@@ -53,29 +52,29 @@ class PermissionFolderController extends Controller
             ], 422);
         }
 
-        // Periksa apakah pengguna yang meminta memiliki izin untuk melihat perizinan folder ini
-        $permission = $this->checkPermission($request->folder_id);
+        // Periksa apakah pengguna yang meminta memiliki izin untuk melihat perizinan file ini
+        $permission = $this->checkPermission($request->file_id);
         if (!$permission) {
             return response()->json([
-                'errors' => 'You do not have the authority to view permissions on this Folder.'
+                'errors' => 'You do not have the authority to view permissions on this file.'
             ], 403);
         }
 
         try {
-            // Ambil semua pengguna dengan izin yang terkait dengan folder yang diberikan
-            $userFolderPermissions = UserFolderPermission::with('users')
-                ->where('folder_id', $request->folder_id)
+            // Ambil semua pengguna dengan izin yang terkait dengan file yang diberikan
+            $userFilePermissions = UserFilePermission::with('users')
+                ->where('file_id', $request->file_id)
                 ->get();
 
-            if ($userFolderPermissions->isEmpty()) {
+            if ($userFilePermissions->isEmpty()) {
                 return response()->json([
-                    'message' => 'No user has permission on this folder.'
+                    'message' => 'No user has permission on this file.'
                 ], 404);
             }
 
             // Siapkan data untuk response
             $responseData = [];
-            foreach ($userFolderPermissions as $permission) {
+            foreach ($userFilePermissions as $permission) {
                 $responseData[] = [
                     'user_id' => $permission->users->id,
                     'user_name' => $permission->users->name,
@@ -84,17 +83,17 @@ class PermissionFolderController extends Controller
             }
 
             return response()->json([
-                'message' => 'List of users with permissions on folder successfully retrieved.',
+                'message' => 'List of users with permissions on file successfully retrieved.',
                 'data' => $responseData
             ], 200);
         } catch (Exception $e) {
-            Log::error('Error occurred while retrieving users with permissions for folder: ' . $e->getMessage(), [
-                'folder_id' => $request->folder_id,
+            Log::error('Error occurred while retrieving users with permissions for file: ' . $e->getMessage(), [
+                'file_id' => $request->file_id,
                 'trace' => $e->getTraceAsString(),
             ]);
 
             return response()->json([
-                'errors' => 'An error occurred while retrieving the list of users with permissions for this folder.'
+                'errors' => 'An error occurred while retrieving the list of users with permissions for this file.'
             ], 500);
         }
     }
@@ -105,7 +104,7 @@ class PermissionFolderController extends Controller
             request()->all(),
             [
                 'user_id' => 'required|integer|exists:users,id',
-                'folder_id' => 'required|integer|exists:folders,id',
+                'file_id' => 'required|integer|exists:files,id',
             ],
         );
 
@@ -115,25 +114,25 @@ class PermissionFolderController extends Controller
             ], 422);
         }
 
-        $permission = $this->checkPermission($request->folder_id);
+        $permission = $this->checkPermission($request->file_id);
         if (!$permission) {
             return response()->json([
-                'errors' => 'You do not have the authority to view permissions on this Folder.'
+                'errors' => 'You do not have the authority to view permissions on this file.'
             ], 403);
         }
 
         try {
-            $userFolderPermission = UserFolderPermission::where('user_id', $request->user_id)->where('folder_id', $request->folder_id)->first();
+            $userFilePermission = UserFilePermission::where('user_id', $request->user_id)->where('file_id', $request->file_id)->first();
 
-            if (!$userFolderPermission) {
+            if (!$userFilePermission) {
                 return response()->json([
-                    'errors' => 'User has not have any permission in folder: ' . $userFolderPermission->folders->name
+                    'errors' => 'User has not have any permission in file: ' . $userFilePermission->files->name
                 ], 404);
             }
 
             return response()->json([
-                'message' => 'User ' . $userFolderPermission->users->name . ' has get some permission to folder: ' . $userFolderPermission->folders->name,
-                'data' => $userFolderPermission
+                'message' => 'User ' . $userFilePermission->users->name . ' has get some permission to file: ' . $userFilePermission->files->name,
+                'data' => $userFilePermission
             ]);
         } catch (Exception $e) {
             Log::error($e->getMessage());
@@ -143,14 +142,14 @@ class PermissionFolderController extends Controller
         }
     }
 
-    public function grantFolderPermission(Request $request)
+    public function grantfilePermission(Request $request)
     {
         $validator = Validator::make(
             request()->all(),
             [
                 'user_id' => 'required|integer|exists:users,id',
-                'folder_id' => 'required|integer|exists:folders,id',
-                'permissions' => 'required|array|only:folder_read,folder_edit,folder_delete',
+                'file_id' => 'required|integer|exists:files,id',
+                'permissions' => 'required|array|only:file_read,file_edit,file_delete',
             ],
         );
 
@@ -160,35 +159,35 @@ class PermissionFolderController extends Controller
             ], 422);
         }
 
-        // check if the user who owns the folder will grant permissions.
-        $permission = $this->checkPermission($request->folder_id);
+        // check if the user who owns the file will grant permissions.
+        $permission = $this->checkPermission($request->file_id);
         if (!$permission) {
             return response()->json([
-                'errors' => 'You do not have the authority to grant permissions on this Folder.'
+                'errors' => 'You do not have the authority to grant permissions on this file.'
             ], 403);
         }
 
         DB::beginTransaction();
 
         try {
-            $userFolderPermission = UserFolderPermission::where('user_id', $request->user_id)->where('folder_id', $request->folder_id)->first();
+            $userFilePermission = UserFilePermission::where('user_id', $request->user_id)->where('file_id', $request->file_id)->first();
 
-            if ($userFolderPermission) {
+            if ($userFilePermission) {
                 return response()->json([
-                    'errors' => 'The user already has one of the permissions on the folder.'
+                    'errors' => 'The user already has one of the permissions on the file.'
                 ], 409); // HTTP response konflik karena data perizinan user sudah ada sebelumnya.
             }
 
-            $userFolderPermission = UserFolderPermission::create([
+            $userFilePermission = UserFilePermission::create([
                 'user_id' => $request->user_id,
-                'folder_id' => $request->folder_id,
+                'file_id' => $request->file_id,
                 'permissions' => $request->permissions
             ]);
             DB::commit();
 
             return response()->json([
-                'message' => 'User ' . $userFolderPermission->users->name . ' has been granted permission ' . $userFolderPermission->permissions . ' to folder: ' . $userFolderPermission->folders->name,
-                'data' => $userFolderPermission
+                'message' => 'User ' . $userFilePermission->users->name . ' has been granted permission ' . $userFilePermission->permissions . ' to file: ' . $userFilePermission->files->name,
+                'data' => $userFilePermission
             ], 200);
 
         } catch (Exception $e) {
@@ -201,14 +200,14 @@ class PermissionFolderController extends Controller
         }
     }
 
-    public function changeFolderPermission(Request $request)
+    public function changefilePermission(Request $request)
     {
         $validator = Validator::make(
             request()->all(),
             [
                 'user_id' => 'required|integer|exists:users,id',
-                'folder_id' => 'required|integer|exists:folders,id',
-                'permissions' => 'required|array|only:folder_read,folder_edit,folder_delete',
+                'file_id' => 'required|integer|exists:files,id',
+                'permissions' => 'required|array|only:file_read,file_edit,file_delete',
             ],
         );
 
@@ -218,33 +217,33 @@ class PermissionFolderController extends Controller
             ], 422);
         }
 
-        // check if the user who owns the folder will revoke permissions.
-        $permission = $this->checkPermission($request->folder_id);
+        // check if the user who owns the file will revoke permissions.
+        $permission = $this->checkPermission($request->file_id);
         if (!$permission) {
             return response()->json([
-                'errors' => 'You do not have the authority to change permissions on this Folder.'
+                'errors' => 'You do not have the authority to change permissions on this file.'
             ], 403);
         }
 
         DB::beginTransaction();
 
         try {
-            $userFolderPermission = UserFolderPermission::where('user_id', $request->user_id)->where('folder_id', $request->folder_id)->first();
+            $userFilePermission = UserFilePermission::where('user_id', $request->user_id)->where('file_id', $request->file_id)->first();
 
-            if (!$userFolderPermission) {
+            if (!$userFilePermission) {
                 return response()->json([
                     'errors' => 'The user whose permissions you want to change is not registered in the permissions data.'
                 ], 404);
             }
 
             // custom what permission to be revoked
-            $userFolderPermission->permissions = array_diff($userFolderPermission->permissions, $request->permissions);
-            $userFolderPermission->save();
+            $userFilePermission->permissions = array_diff($userFilePermission->permissions, $request->permissions);
+            $userFilePermission->save();
             DB::commit();
 
             return response()->json([
-                'message' => 'User' . $userFolderPermission->users->name . ' has been successfully changed permissions on folder: ' . $userFolderPermission->folders->name,
-                'data' => $userFolderPermission
+                'message' => 'User' . $userFilePermission->users->name . ' has been successfully changed permissions on file: ' . $userFilePermission->files->name,
+                'data' => $userFilePermission
             ], 200);
         } catch (Exception $e) {
             DB::rollBack();
@@ -256,13 +255,13 @@ class PermissionFolderController extends Controller
         }
     }
 
-    public function revokeAllFolderPermission(Request $request)
+    public function revokeAllfilePermission(Request $request)
     {
         $validator = Validator::make(
             request()->all(),
             [
                 'user_id' => 'required|integer|exists:users,id',
-                'folder_id' => 'required|integer|exists:folders,id',
+                'file_id' => 'required|integer|exists:files,id',
             ],
         );
 
@@ -272,30 +271,30 @@ class PermissionFolderController extends Controller
             ], 422);
         }
 
-        // check if the user who owns the folder will revoke permissions.
-        $permission = $this->checkPermission($request->folder_id);
+        // check if the user who owns the file will revoke permissions.
+        $permission = $this->checkPermission($request->file_id);
         if (!$permission) {
             return response()->json([
-                'errors' => 'You do not have the authority to revoke permissions on this Folder.'
+                'errors' => 'You do not have the authority to revoke permissions on this file.'
             ], 403);
         }
 
         DB::beginTransaction();
 
         try {
-            $userFolderPermission = UserFolderPermission::where('user_id', $request->user_id)->where('folder_id', $request->folder_id)->first();
+            $userFilePermission = UserFilePermission::where('user_id', $request->user_id)->where('file_id', $request->file_id)->first();
 
-            if (!$userFolderPermission) {
+            if (!$userFilePermission) {
                 return response()->json([
                     'errors' => 'The user whose permissions you want to revoke is not registered in the permissions data.'
                 ], 404);
             }
 
-            $userFolderPermission->delete();
+            $userFilePermission->delete();
             DB::commit();
 
             return response()->json([
-                'message' => 'All permission for user ' . $userFolderPermission->users->name . ' on folder ' . $userFolderPermission->folders->name . ' has been revoked.'
+                'message' => 'All permission for user ' . $userFilePermission->users->name . ' on file ' . $userFilePermission->files->name . ' has been revoked.'
             ], 200);
         } catch (Exception $e) {
             DB::rollBack();

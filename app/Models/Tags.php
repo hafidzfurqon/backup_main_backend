@@ -17,4 +17,9 @@ class Tags extends Model
     {
         return $this->belongsToMany(Folder::class, 'folder_has_tags');
     }
+
+    public function files()
+    {
+        return $this->belongsToMany(File::class, 'file_has_tags');
+    }
 }

@@ -87,8 +87,8 @@ Route::middleware(['auth:api', 'validate_admin'])->group(function () {
         });
 
         Route::prefix('tag')->group(function () {
-            Route::get('/', [TagController::class, 'index']); // dapatkan semua list tag yang ada
-            Route::post('/getTagsId', [TagController::class, 'getTagsId']); // dapatkan id dari tags dengan query parameter nama tag (contoh: /getTagsId?name=tag)
+            Route::post('/index', [TagController::class, 'index']); // dapatkan semua list tag yang ada
+            Route::get('/getTagsInfo', [TagController::class, 'getTagsInformation']); // dapatkan id dari tags dengan query parameter nama tag (contoh: /getTagsId?name=tag)
             Route::post('/create', [TagController::class, 'store']); // Buat tag baru
             Route::put('/update', [TagController::class, 'update']); // Update tag yang ada sebelumnya
             Route::post('/delete', [TagController::class, 'destroy']); // Hapus tag yang ada sebelumnya dengan array request body
