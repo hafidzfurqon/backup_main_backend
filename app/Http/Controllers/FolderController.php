@@ -42,7 +42,7 @@ class FolderController extends Controller
         if ($user->hasRole('admin') && $user->is_superadmin == 1) {
             return true;
         }
-        // jika hanya admin dan tidak ada privilege SUPERADMIN, kembalikan false (tidak diizinkan) 
+        // jika hanya admin dan tidak ada privilege SUPERADMIN, kembalikan false (tidak diizinkan)
         else if ($user->hasRole('admin')) {
             return false;
         }
