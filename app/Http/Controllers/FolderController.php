@@ -29,7 +29,7 @@ class FolderController extends Controller
         // If folder not found, return 404 error and stop the process
         if (!$folder) {
             return response()->json([
-                'errors' => 'Folder dengan Folder ID yang anda masukan tidak ditemukan, Silahkan periksa kembali Folder ID yang anda masukan.'
+                'errors' => 'Folder with Folder ID you entered not found, Please check your Folder ID and try again.'
             ], 404); // Setting status code to 404 Not Found
         }
 
@@ -114,7 +114,7 @@ class FolderController extends Controller
 
             if (!$rootFolder) {
                 return response()->json([
-                    'errors' => 'Terjadi kesalahan pada sistem'
+                    'errors' => 'An error was occured. Please contact our support.'
                 ]);
             }
 
@@ -125,7 +125,7 @@ class FolderController extends Controller
             $formattedStorageSize = $this->formatSizeUnits($totalUsedStorage);
 
             return response()->json([
-                'message' => 'Anda telah menggunakan penyimpanan sebanyak: ' . $totalUsedStorage,
+                'message' => 'Your storage usage: ' . $totalUsedStorage,
                 'data' => [
                     'rawSize' => $totalUsedStorage,
                     'formattedSize' => $formattedStorageSize
@@ -148,7 +148,7 @@ class FolderController extends Controller
              */
             if (!$parentFolder) {
                 return response()->json([
-                    'message' => 'Parent folder not found.'
+                    'message' => 'An error was occured. Please contact our support.'
                 ], 404);
             }
 
@@ -172,7 +172,6 @@ class FolderController extends Controller
                 return [
                     'folder_id' => $folder->id,
                     'name' => $folder->name,
-                    'description' => $folder->description,
                     'total_size' => $this->calculateFolderSize($folder), // Hitung total ukuran folder
                     'type' => $folder->type,
                     'user_id' => $folder->user->id,
@@ -204,7 +203,7 @@ class FolderController extends Controller
             ]);
 
             return response()->json([
-                'errors' => 'Terjadi kesalahan saat mendapatkan folder dan file.',
+                'errors' => 'An error occurred while getting folders and files.',
             ], 500);
         }
     }
@@ -214,7 +213,7 @@ class FolderController extends Controller
         $permission = $this->checkPermissionFolder($id, 'folder_read');
         if (!$permission) {
             return response()->json([
-                'errors' => 'Anda tidak memiliki izin untuk melihat folder  ini.',
+                'errors' => 'You do not have permission to access this folder.',
             ], 403);
         }
 
@@ -233,7 +232,6 @@ class FolderController extends Controller
             $folderResponse = [
                 'folder_id' => $folder->id,
                 'name' => $folder->name,
-                'description' => $folder->description,
                 'total_size' => $this->calculateFolderSize($folder),
                 'type' => $folder->type,
                 'parent_id' => $folder->parent_id ? $folder->parentFolder->id : null,
@@ -277,7 +275,7 @@ class FolderController extends Controller
             ]);
 
             return response()->json([
-                'errors' => 'Terjadi kesalahan saat mendapatkan informasi folder.',
+                'errors' => 'An error occurred while getting folder info.',
             ], 500);
         }
     }
@@ -291,10 +289,9 @@ class FolderController extends Controller
             $request->all(),
             [
                 'name' => 'required|string',
-                'description' => 'required|string',
                 'parent_id' => 'nullable|integer|exists:folders,id',
-                'tags' => 'required|array',
-                'tags.*' => ['string', 'regex:/^[a-zA-Z]+$/'], // Validasi agar tags hanya boleh berisi huruf
+                'tags' => 'nullable|array',
+                'tags.*' => ['string', 'regex:/^[a-zA-Z\s]+$/'],
             ],
         );
 
@@ -323,7 +320,7 @@ class FolderController extends Controller
                 $permission = $this->checkPermissionFolder($request->parent_id, 'folder_edit');
                 if (!$permission) {
                     return response()->json([
-                        'errors' => 'Anda tidak memiliki izin untuk membuat folder pada parent_folder yang anda masukan.',
+                        'errors' => 'You do not have permission to create folder in this parent_id',
                     ], 403);
                 } else {
                     $parentId = $request->parent_id;
@@ -333,41 +330,41 @@ class FolderController extends Controller
             // Create folder in database
             $newFolder = Folder::create([
                 'name' => $request->name,
-                'description' => $request->description,
                 'user_id' => $userId,
                 'parent_id' => $parentId,
             ]);
 
             $userData = User::where('id', $userId)->first();
 
-            // disini, tambahkan kode agar folder user terkait dengan instance user.
             $userInstance = $userData->instances->pluck('id')->toArray();  // Mengambil instance user
             $newFolder->instances()->sync($userInstance);  // Sinkronisasi instance ke folder baru
 
-            // Proses tags
-            $tagIds = [];
+            if ($request->tags) {
+                // Proses tags
+                $tagIds = [];
 
-            foreach ($request->tags as $tagName) {
-                // Periksa apakah tag sudah ada di database (case-insensitive)
-                $tag = Tags::whereRaw('LOWER(name) = ?', [strtolower($tagName)])->first();
+                foreach ($request->tags as $tagName) {
+                    // Periksa apakah tag sudah ada di database (case-insensitive)
+                    $tag = Tags::whereRaw('LOWER(name) = ?', [strtolower($tagName)])->first();
 
-                if (!$tag) {
-                    // Jika tag belum ada, buat tag baru
-                    $tag = Tags::create(['name' => ucfirst($tagName)]);
+                    if (!$tag) {
+                        // Jika tag belum ada, buat tag baru
+                        $tag = Tags::create(['name' => ucfirst($tagName)]);
+                    }
+
+                    // Ambil id dari tag (baik yang sudah ada atau baru dibuat)
+                    $tagIds[] = $tag->id;
+
+                    // Masukkan id dan name dari tag ke dalam array untuk response
+                    $tagsData[] = [
+                        'id' => $tag->id,
+                        'name' => $tag->name
+                    ];
                 }
 
-                // Ambil id dari tag (baik yang sudah ada atau baru dibuat)
-                $tagIds[] = $tag->id;
-
-                // Masukkan id dan name dari tag ke dalam array untuk response
-                $tagsData[] = [
-                    'id' => $tag->id,
-                    'name' => $tag->name
-                ];
+                // Simpan tags ke tabel pivot folder_has_tags
+                $newFolder->tags()->sync($tagIds);
             }
-
-            // Simpan tags ke tabel pivot folder_has_tags
-            $newFolder->tags()->sync($tagIds);
 
             // COMMIT JIKA TIDAK ADA ERROR
             DB::commit();
@@ -391,8 +388,7 @@ class FolderController extends Controller
             return response()->json([
                 'message' => $newFolder->parent_id ? 'Subfolder created successfully' : 'Folder created successfully',
                 'data' => [
-                    'folder' => $newFolder,
-                    'storage_path' => $fullPath,
+                    'folder' => $newFolder
                 ]
             ], 201);
         } catch (Exception $e) {
@@ -407,7 +403,82 @@ class FolderController extends Controller
             ]);
 
             return response()->json([
-                'errors' => 'Terjadi kesalahan saat membuat folder.',
+                'errors' => 'An error occurred while creating folder.',
+            ], 500);
+        }
+    }
+
+    /**
+     * Add a tag to a folder.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function addTagToFolder(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'folder_id' => 'required|integer|exists:folders,id',
+            'tag_id' => 'required|integer|exists:tags,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        // Periksa perizinan
+        $permissionCheck = $this->checkPermissionFolder($request->folder_id, 'folder_edit');
+        if (!$permissionCheck) {
+            return response()->json([
+                'errors' => 'You do not have permission to add tag to this folder.',
+            ], 403);
+        }
+
+        DB::beginTransaction();
+
+        try {
+            $folder = Folder::findOrFail($request->folder_id);
+            $tag = Tags::findOrFail($request->tag_id);
+
+            // Memeriksa apakah tag sudah terkait dengan folder
+            if ($folder->tags->contains($tag->id)) {
+                return response()->json([
+                    'errors' => 'Tag already exists in folder.'
+                ], 409);
+            }
+
+            // Menambahkan tag ke folder (tabel pivot folder_has_tags)
+            $folder->tags()->attach($tag->id);
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Successfully added tag to folder.',
+                'data' => [
+                    'folder_id' => $folder->id,
+                    'folder_name' => $folder->name,
+                    'tag_id' => $tag->id,
+                    'tag_name' => $tag->name
+                ]
+            ], 200);
+        } catch (ModelNotFoundException $e) {
+
+            DB::rollBack();
+
+            return response()->json([
+                'errors' => 'Folder or tag not found.'
+            ], 404);
+        } catch (Exception $e) {
+
+            DB::rollBack();
+
+            Log::error('Error occurred on adding tag to folder: ' . $e->getMessage(), [
+                'folder_id' => $request->folder_id,
+                'tag_id' => $request->tag_id,
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'errors' => 'An error occurred on adding tag to folder.'
             ], 500);
         }
     }
@@ -433,7 +504,7 @@ class FolderController extends Controller
         $permissionCheck = $this->checkPermissionFolder($request->folder_id, 'folder_edit'); // misalnya folder_edit adalah action untuk edit atau modifikasi
         if (!$permissionCheck) {
             return response()->json([
-                'errors' => 'Anda tidak memiliki izin untuk mengubah tag pada folder ini.',
+                'errors' => 'You do not have permission to remove tag from this folder.',
             ], 403);
         }
 
@@ -446,7 +517,7 @@ class FolderController extends Controller
             // Memeriksa apakah tag terkait dengan folder
             if (!$folder->tags->contains($tag->id)) {
                 return response()->json([
-                    'errors' => 'Tag tidak ditemukan dalam folder ini.'
+                    'errors' => 'Tag not found in folder.'
                 ], 404);
             }
 
@@ -456,19 +527,15 @@ class FolderController extends Controller
             DB::commit();
 
             return response()->json([
-                'message' => 'Tag berhasil dihapus dari folder.',
-                'data' => [
-                    'folder_id' => $folder->id,
-                    'tag_id' => $tag->id,
-                    'tag_name' => $tag->name
-                ]
+                'message' => 'Successfully removed tag from folder.',
+                'data' => []
             ], 200);
         } catch (ModelNotFoundException $e) {
 
             DB::rollBack();
 
             return response()->json([
-                'errors' => 'Folder atau tag tidak ditemukan.'
+                'errors' => 'Folder or tag not found.'
             ], 404);
         } catch (Exception $e) {
 
@@ -481,7 +548,7 @@ class FolderController extends Controller
             ]);
 
             return response()->json([
-                'errors' => 'Terjadi kesalahan saat menghapus tag dari folder.'
+                'errors' => 'An error occurred on removing tag from folder.'
             ], 500);
         }
     }
@@ -494,15 +561,14 @@ class FolderController extends Controller
         $permissionCheck = $this->checkPermissionFolder($id, 'folder_edit');
         if (!$permissionCheck) {
             return response()->json([
-                'errors' => 'Anda tidak memiliki izin untuk mengubah nama folder ini.',
+                'errors' => 'You do not have permission to edit this folder.',
             ], 403);
         }
 
         $validator = Validator::make($request->all(), [
             'name' => 'required|string',
-            'description' => 'required|string',
-            'tags' => 'required|array',
-            'tags.*' => ['string', 'regex:/^[a-zA-Z]+$/'],
+            'tags' => 'nullable|array',
+            'tags.*' => ['string', 'regex:/^[a-zA-Z\s]+$/'],
         ]);
 
         if ($validator->fails()) {
@@ -517,27 +583,28 @@ class FolderController extends Controller
             // Update folder name in the database, but keep the same NanoID
             $oldNanoid = $folder->nanoid;
             $folder->name = $request->name;
-            $folder->description = $request->description;
             $folder->save();
 
-            // Process tags
-            $tags = $request->tags;
-            $tagIds = [];
+            if ($request->tags) {
+                // Process tags
+                $tags = $request->tags;
+                $tagIds = [];
 
-            foreach ($tags as $tagName) {
-                // Check if tag exists, case-insensitive
-                $tag = Tags::whereRaw('LOWER(name) = ?', [strtolower($tagName)])->first();
+                foreach ($tags as $tagName) {
+                    // Check if tag exists, case-insensitive
+                    $tag = Tags::whereRaw('LOWER(name) = ?', [strtolower($tagName)])->first();
 
-                if (!$tag) {
-                    // If tag doesn't exist, create it
-                    $tag = Tags::create(['name' => ucfirst($tagName)]);
+                    if (!$tag) {
+                        // If tag doesn't exist, create it
+                        $tag = Tags::create(['name' => ucfirst($tagName)]);
+                    }
+
+                    $tagIds[] = $tag->id;
                 }
 
-                $tagIds[] = $tag->id;
+                // Sync the tags with the folder (in the pivot table)
+                $folder->tags()->sync($tagIds);
             }
-
-            // Sync the tags with the folder (in the pivot table)
-            $folder->tags()->sync($tagIds);
 
             DB::commit();
 
@@ -551,14 +618,14 @@ class FolderController extends Controller
             }
 
             return response()->json([
-                'message' => 'Nama folder berhasil diubah.',
+                'message' => 'Folder name updated successfully.',
                 'data' => [
                     'folder' => $folder
                 ]
             ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json([
-                'errors' => 'Folder tidak ditemukan.',
+                'errors' => 'Folder not found.',
             ], 404);
         } catch (Exception $e) {
             DB::rollBack();
@@ -570,7 +637,7 @@ class FolderController extends Controller
             ]);
 
             return response()->json([
-                'errors' => 'Terjadi kesalahan saat mengubah nama folder.',
+                'errors' => 'An error occurred on updating folder.',
             ], 500);
         }
     }
@@ -602,8 +669,9 @@ class FolderController extends Controller
                 // Cek izin untuk setiap folder
                 $permissionCheck = $this->checkPermissionFolder($folderId, 'folder_delete');
                 if (!$permissionCheck) {
+                    Log::error('Some users was trying to delete one of the selected folders that not have permission: ' . $folderId);
                     return response()->json([
-                        'errors' => 'Anda tidak mempunyai izin untuk menghapus folder dengan ID ' . $folderId,
+                        'errors' => 'You do not have permission to delete one of the selected folders.',
                     ], 403);
                 }
 
@@ -629,7 +697,7 @@ class FolderController extends Controller
             DB::commit();
 
             return response()->json([
-                'message' => 'Folder berhasil dihapus.',
+                'message' => 'Folder(s) deleted successfully.',
                 'data' => []
             ], 200);
         } catch (ModelNotFoundException $e) {
@@ -646,7 +714,7 @@ class FolderController extends Controller
             ]);
 
             return response()->json([
-                'errors' => 'Terjadi kesalahan saat menghapus folder.',
+                'errors' => 'An error occurred on deleting folder(s).',
             ], 500);
         }
     }
@@ -661,7 +729,7 @@ class FolderController extends Controller
         $permissionCheck = $this->checkPermissionFolder($request->folder_id, 'folder_edit');
         if (!$permissionCheck) {
             return response()->json([
-                'errors' => 'Anda tidak mempunyai izin untuk memindahkan folder ini.',
+                'errors' => 'You do not have permission to move this folder.',
             ], 403);
         }
 
@@ -688,7 +756,7 @@ class FolderController extends Controller
                 $permissionCheck = $this->checkPermissionFolder($request->new_parent_id, 'folder_edit');
                 if (!$permissionCheck) {
                     return response()->json([
-                        'errors' => 'Anda tidak mendapatkan izin pada folder yang anda tuju untuk memindahkan folder ini.',
+                        'errors' => 'You do not have permission on the folder you are trying to move this folder to.',
                     ], 403);
                 }
             }
@@ -707,7 +775,7 @@ class FolderController extends Controller
             }
 
             return response()->json([
-                'message' => 'Folder berhasil di pindahkan.',
+                'message' => 'Folder moved successfully.',
                 'data' => [
                     'folder' => $folder
                 ]
@@ -726,7 +794,7 @@ class FolderController extends Controller
             ]);
 
             return response()->json([
-                'errors' => 'Terjadi kesalahan saat memindahkan folder.',
+                'errors' => 'An error occurred on moving the folder.',
             ], 500);
         }
     }
@@ -776,7 +844,7 @@ class FolderController extends Controller
             ]);
 
             return response()->json([
-                'errors' => 'Terjadi kesalahan saat mendapatkan path folder.',
+                'errors' => 'An error occurred on getting folder path.',
             ], 500);
         }
     }

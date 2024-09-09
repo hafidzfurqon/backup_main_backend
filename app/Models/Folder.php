@@ -15,7 +15,6 @@ class Folder extends Model
     protected $fillable = [
         'nanoid',
         'name',
-        'description',
         'type',
         'user_id',
         'parent_id'

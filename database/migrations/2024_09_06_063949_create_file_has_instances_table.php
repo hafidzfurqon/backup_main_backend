@@ -11,10 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('instances', function (Blueprint $table) {
+        Schema::create('file_has_instances', function (Blueprint $table) {
             $table->id();
-            $table->string('name');
-            $table->string('address');
+            $table->foreignId('file_id')->references('id')->on('files')->cascadeOnDelete();
+            $table->foreignId('instance_id')->references('id')->on('instances')->cascadeOnDelete();
             $table->timestamps();
         });
     }
@@ -24,6 +24,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('instances');
+        Schema::dropIfExists('file_has_instances');
     }
 };

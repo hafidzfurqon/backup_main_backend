@@ -12,10 +12,19 @@ class Instance extends Model
 
     protected $table = 'instances';
 
-    protected $fillable = ['name', 'email', 'address']; // Sesuaikan dengan atribut yang relevan
-
+    protected $fillable = ['name', 'address'];
     public function users(): BelongsToMany
     {
-        return $this->belongsToMany(User::class, 'user_has_instance_models');
+        return $this->belongsToMany(User::class, 'user_has_instances');
+    }
+
+    public function folders(): BelongsToMany
+    {
+        return $this->belongsToMany(Folder::class, 'folder_has_instances');
+    }
+
+    public function files(): BelongsToMany
+    {
+        return $this->belongsToMany(File::class, 'file_has_instances');
     }
 }

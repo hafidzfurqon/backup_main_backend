@@ -16,7 +16,7 @@ class TagController extends Controller
     protected $checkAdminService;
 
     // Inject RoleService ke dalam constructor
-    private function __construct(CheckAdminService $checkAdminService)
+    public function __construct(CheckAdminService $checkAdminService)
     {
         $this->checkAdminService = $checkAdminService;
     }
@@ -34,26 +34,32 @@ class TagController extends Controller
         try {
             if ($request->query('name')) {
                 $keywordName = $request->query('name');
+
                 $allTag = Tags::where('name', 'like', '%' . $keywordName . '%')->paginate(10);
+
                 if ($allTag->isEmpty()) {
                     return response()->json([
                         'errors' => 'Data tag tidak ditemukan.'
                     ], 404);
                 }
+
                 return response()->json($allTag, 200);  // Kembalikan isi pagination tanpa membungkus lagi
             } else {
                 $allTag = Tags::paginate(10);
+
                 return response()->json($allTag, 200);
             }
         } catch (\Exception $e) {
+
             Log::error('Terjadi kesalahan saat mendapatkan data tag: ' . $e->getMessage());
+
             return response()->json([
                 'errors' => 'Terjadi kesalahan saat mendapatkan data tag.'
             ], 500);
         }
     }
 
-    public function getTagsId(Request $request)
+    public function getTagsInformation($id)
     {
         $checkAdmin = $this->checkAdminService->checkAdmin();
 
@@ -65,22 +71,17 @@ class TagController extends Controller
 
         try {
 
-            $keywordName = $request->query('name');
+            $tagData = Tags::where('id', $id)->first();
 
-            // Ambil hanya kolom 'id' tanpa pagination
-            $tagId = Tags::where('name', 'like', '%' . $keywordName . '%')
-                ->get(['id', 'name']);
-
-            if ($tagId->isEmpty()) {
+            if(!$tagData){
                 return response()->json([
-                    'errors' => 'Data tag tidak ditemukan.'
-                ], 404);
+                    'errors' => 'Tag tidak ditemukan.'
+                ]);
             }
 
-            // Kembalikan daftar ID
             return response()->json([
-                'data' => $tagId
-            ], 200);
+                'data' => $tagData
+            ]);
             
         } catch (\Exception $e) {
             Log::error('Terjadi kesalahan saat mendapatkan data tag: ' . $e->getMessage());

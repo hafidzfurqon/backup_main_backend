@@ -15,7 +15,7 @@ class FAQController extends Controller
     protected $checkAdminService;
 
     // Inject RoleService ke dalam constructor
-    private function __construct(CheckAdminService $checkAdminService)
+    public function __construct(CheckAdminService $checkAdminService)
     {
         $this->checkAdminService = $checkAdminService;
     }
@@ -26,7 +26,7 @@ class FAQController extends Controller
 
         if(!$checkAdmin) {
             return response()->json([
-                'errors' => 'Anda tidak memiliki izin untuk melihat FAQ.'
+                'errors' => 'You do not have permission to fetch FAQs.'
             ], 403);
         }
 
@@ -44,9 +44,9 @@ class FAQController extends Controller
             ], 200);
 
         } catch (\Exception $e) {
-            Log::error('Terjadi kesalahan saat mendapatkan data FAQ: ' . $e->getMessage());
+            Log::error('An error occurred while fetching FAQs: ' . $e->getMessage());
             return response()->json([
-                'errors' => 'Terjadi kesalahan saat mendapatkan data FAQ.'
+                'errors' => 'An error occurred while fetching FAQs.'
             ], 500);
         }
     }
@@ -57,7 +57,7 @@ class FAQController extends Controller
 
         if(!$checkAdmin) {
             return response()->json([
-                'errors' => 'Anda tidak memiliki izin untuk membuat FAQ.'
+                'errors' => 'You do not have permission to create FAQs.'
             ], 403);
         }
 
@@ -86,17 +86,17 @@ class FAQController extends Controller
             DB::commit();
 
             return response()->json([
-                'message' => 'FAQ berhasil dibuat',
+                'message' => 'FAQ created successfully',
                 'data' => $faq
             ], 201);
 
         } catch (\Exception $e) {
             DB::rollBack();
 
-            Log::error('Terjadi kesalahan saat membuat data FAQ: ' . $e->getMessage());
+            Log::error('An error occurred while creating FAQ: ' . $e->getMessage());
 
             return response()->json([
-                'errors' => 'Terjadi kesalahan saat membuat data FAQ.'
+                'errors' => 'An error occurred while creating FAQ.'
             ], 500);
         }
     }
@@ -107,7 +107,7 @@ class FAQController extends Controller
 
         if(!$checkAdmin) {
             return response()->json([
-                'errors' => 'Anda tidak memiliki izin untuk mengupdate FAQ.'
+                'errors' => 'You do not have permission to update FAQs.'
             ], 403);
         }
 
@@ -115,7 +115,7 @@ class FAQController extends Controller
 
         if(!$faq) {
             return response()->json([
-                'errors' => 'FAQ tidak ditemukan'
+                'errors' => 'FAQ not found'
             ], 404);
         }
 
@@ -141,17 +141,17 @@ class FAQController extends Controller
             DB::commit();
 
             return response()->json([
-                'message' => 'FAQ berhasil diperbarui',
+                'message' => 'FAQ updated successfully',
                 'data' => $faq
             ], 200);
 
         } catch (\Exception $e) {
             DB::rollBack();
 
-            Log::error('Terjadi kesalahan saat mengupdate data FAQ: ' . $e->getMessage());
+            Log::error('An error occurred while updating FAQ: ' . $e->getMessage());
 
             return response()->json([
-                'errors' => 'Terjadi kesalahan saat mengupdate data FAQ.'
+                'errors' => 'An error occurred while updating FAQ.'
             ], 500);
         }
     }
@@ -162,7 +162,7 @@ class FAQController extends Controller
 
         if(!$checkAdmin) {
             return response()->json([
-                'errors' => 'Anda tidak memiliki izin untuk menghapus FAQ.'
+                'errors' => 'You do not have permission to delete FAQs.'
             ], 403);
         }
 
@@ -170,7 +170,7 @@ class FAQController extends Controller
 
         if(!$faq) {
             return response()->json([
-                'errors' => 'FAQ tidak ditemukan'
+                'errors' => 'FAQ not found'
             ], 404);
         }
 
@@ -180,16 +180,16 @@ class FAQController extends Controller
             DB::commit();
 
             return response()->json([
-                'message' => 'FAQ berhasil dihapus',
+                'message' => 'FAQ deleted successfully',
                 'data' => $faq
             ], 200);
         } catch (\Exception $e) {
             DB::rollBack();
 
-            Log::error('Terjadi kesalahan saat menghapus data FAQ: ' . $e->getMessage());
+            Log::error('An error occurred while deleting FAQ: ' . $e->getMessage());
             
             return response()->json([
-                'errors' => 'Terjadi kesalahan saat menghapus data FAQ.'
+                'errors' => 'An error occurred while deleting FAQ.'
             ], 500);
         }
     }

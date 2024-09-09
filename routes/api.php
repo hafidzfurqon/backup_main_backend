@@ -87,8 +87,8 @@ Route::middleware(['auth:api', 'validate_admin'])->group(function () {
         });
 
         Route::prefix('tag')->group(function () {
-            Route::get('/', [TagController::class, 'index']); // dapatkan semua list tag yang ada
-            Route::post('/getTagsId', [TagController::class, 'getTagsId']); // dapatkan id dari tags dengan query parameter nama tag (contoh: /getTagsId?name=tag)
+            Route::post('/index', [TagController::class, 'index']); // dapatkan semua list tag yang ada
+            Route::get('/getTagsInfo', [TagController::class, 'getTagsInformation']); // dapatkan id dari tags dengan query parameter nama tag (contoh: /getTagsId?name=tag)
             Route::post('/create', [TagController::class, 'store']); // Buat tag baru
             Route::put('/update', [TagController::class, 'update']); // Update tag yang ada sebelumnya
             Route::post('/delete', [TagController::class, 'destroy']); // Hapus tag yang ada sebelumnya dengan array request body
@@ -96,7 +96,7 @@ Route::middleware(['auth:api', 'validate_admin'])->group(function () {
 
         Route::prefix('instansi')->group(function () {
             Route::get('/', [InstanceController::class, 'index']); // dapatkan semua list instansi yang ada
-            Route::post('/instance', [InstanceController::class, 'getInstanceWithName']); // Mendapatkan daftar ID instansi berdasarkan nama (contoh: /instance?name=instansi)
+            Route::post('/cari', [InstanceController::class, 'getInstanceWithName']); // Mendapatkan daftar ID instansi berdasarkan nama (contoh: /instance?name=instansi)
             Route::post('/create', [InstanceController::class, 'store']); // Membuat instansi baru
             Route::put('/update/{id}', [InstanceController::class, 'update']); // Update instansi yang ada sebelumnya
             Route::post('/delete', [InstanceController::class, 'destroy']); // Hapus instansi yang ada sebelumnya dengan array request body

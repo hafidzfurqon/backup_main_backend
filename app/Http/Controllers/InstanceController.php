@@ -15,7 +15,7 @@ class InstanceController extends Controller
     protected $checkAdminService;
 
     // Inject RoleService ke dalam constructor
-    private function __construct(CheckAdminService $checkAdminService)
+    public function __construct(CheckAdminService $checkAdminService)
     {
         $this->checkAdminService = $checkAdminService;
     }
@@ -129,8 +129,8 @@ class InstanceController extends Controller
         $validator = Validator::make(
             $request->all(),
             [
-                'name' => 'required|string|max:255|unique:name',
-                'email' => 'required|string|email|max:255|unique:instances',
+                'name' => 'required|string|max:255|unique:instances,name',
+                'email' => 'required|string|email|max:255|unique:instances,email',
                 'address' => 'required|string|max:255',
             ]
         );
