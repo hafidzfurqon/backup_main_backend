@@ -138,6 +138,11 @@ class FolderController extends Controller
                 ]
             ]);
         } catch (\Exception $e) {
+            Log::error('Error occured while retrieving storage usage: ' . $e->getMessage());
+
+            return response()->json([
+                'errors' => 'An error occured while retrieving storage usage.'
+            ], 500);
         }
     }
 
