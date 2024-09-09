@@ -17,20 +17,19 @@ return [
 
     'paths' => ['api/*', 'sanctum/csrf-cookie'],
 
-    'allowed_methods' => ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    'allowed_methods' => ['*'],
 
-    'allowed_origins' => ['http://localhost:3032', 'http://127.0.0.1:8000'],
+    'allowed_origins' => ['http://localhost:3032', 'http://localhost:3033', 'http://localhost:5173', 'http://localhost:5174', 'http://127.0.0.1:3032', 'http://127.0.0.1:8000'],
 
-    // Menggunakan REGEX untuk pola pattern localhost dengan segala macam portnya :(
-    'allowed_origins_patterns' => ['^http://localhost:\d+$'],
+    'allowed_origins_patterns' => [],
 
-    'allowed_headers' => ['*'],
+    // Explicitly allow Content-Type and other common headers
+    'allowed_headers' => ['Content-Type', 'X-Requested-With', 'Authorization', 'Accept', 'Origin', 'Cache-Control', 'X-CSRF-Token', 'multipart/form-data', '*'],
 
     'exposed_headers' => [],
 
     'max_age' => 0,
 
-     // coba ubah ini ke true jika terjadi CORS. kalo masih kena CORS, i dont know :)
-    'supports_credentials' => false,
+    'supports_credentials' => true,
 
 ];

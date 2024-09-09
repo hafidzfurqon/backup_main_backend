@@ -55,9 +55,9 @@ class FileController extends Controller
         $userFilePermission = UserFilePermission::where('user_id', $user->id)->where('file_id', $file->id)->first();
         if ($userFilePermission) {
             $checkPermission = $userFilePermission->permissions;
-           
-             // Jika $actions adalah string, ubah menjadi array agar lebih mudah diperiksa
-             if (!is_array($actions)) {
+
+            // Jika $actions adalah string, ubah menjadi array agar lebih mudah diperiksa
+            if (!is_array($actions)) {
                 $actions = [$actions];
             }
 
@@ -74,7 +74,7 @@ class FileController extends Controller
             if ($folderPermission) {
                 $checkPermission = $folderPermission->permissions;
 
-                if(!is_array($actions)){
+                if (!is_array($actions)) {
                     $actions = [$actions];
                 }
 
@@ -145,7 +145,10 @@ class FileController extends Controller
         }
 
         try {
-            $file = File::with(['user:id,name,email', 'tags', 'instances:id,name'
+            $file = File::with([
+                'user:id,name,email',
+                'tags',
+                'instances:id,name'
             ])->find($id);
 
             if (!$file) {
@@ -218,8 +221,7 @@ class FileController extends Controller
 
         // Validasi input, mengubah 'file' menjadi array
         $validator = Validator::make($request->all(), [
-            'file' => 'required|array',
-            'file.*' => 'required|file|mimes:jpg,jpeg,png,pdf,doc,docx,xlsx,txt,mp3,ogg,wav,aac,opus,mp4,hevc,mkv,mov,h264,h265,php,js,html,css',
+            'file' => 'required|file|mimes:jpg,jpeg,png,pdf,doc,docx,xlsx,txt,mp3,ogg,wav,aac,opus,mp4,hevc,mkv,mov,h264,h265,php,js,html,css',
             'folder_id' => 'nullable|integer|exists:folders,id',
             'tags' => 'nullable|array',
             'tags.*' => ['string', 'regex:/^[a-zA-Z\s]+$/'],
@@ -247,107 +249,103 @@ class FileController extends Controller
         DB::beginTransaction();
 
         try {
-            $filesData = []; // Array untuk menyimpan data file yang berhasil diunggah
-
             $userData = User::where('id', $user->id)->first();
             $userInstances = $userData->instances->pluck('id')->toArray();  // Mengambil instance user
 
-            foreach ($request->file('file') as $uploadedFile) {
+            $uploadedFile = $request->file('file');
 
-                $originalFileName = $uploadedFile->getClientOriginalName(); // Nama asli file
+            $originalFileName = $uploadedFile->getClientOriginalName(); // Nama asli file
 
-                $fileExtension = $uploadedFile->getClientOriginalExtension(); // Ekstensi file
+            $fileExtension = $uploadedFile->getClientOriginalExtension(); // Ekstensi file
 
-                // Generate NanoID untuk nama file
-                $nanoid = (new \Hidehalo\Nanoid\Client())->generateId();
-                $storageFileName = $nanoid . '.' . $fileExtension;
+            // Generate NanoID untuk nama file
+            $nanoid = (new \Hidehalo\Nanoid\Client())->generateId();
+            $storageFileName = $nanoid . '.' . $fileExtension;
 
-                // Tentukan folder tujuan
-                $folderId = $request->folder_id ?? Folder::where('user_id', $user->id)->whereNull('parent_id')->first()->id;
+            // Tentukan folder tujuan
+            $folderId = $request->folder_id ?? Folder::where('user_id', $user->id)->whereNull('parent_id')->first()->id;
 
-                // Path sementara
-                $tempPath = storage_path('app/temp/' . $storageFileName);
-                $uploadedFile->move(storage_path('app/temp'), $storageFileName);
+            // Path sementara
+            $tempPath = storage_path('app/temp/' . $storageFileName);
+            $uploadedFile->move(storage_path('app/temp'), $storageFileName);
 
-                // Pemindaian file dengan PHP Antimalware Scanner
-                $scanner = new Scanner();
-                $scanResult = $scanner->setPathScan($tempPath)->run();
+            // Pemindaian file dengan PHP Antimalware Scanner
+            $scanner = new Scanner();
+            $scanResult = $scanner->setPathScan($tempPath)->run();
 
-                if ($scanResult->detected >= 1) {
-                    // Hapus file jika terdeteksi virus
-                    if (file_exists($tempPath)) {
-                        unlink($tempPath);
-                    }
-                    DB::rollBack();
-                    return response()->json(['errors' => 'File berisi konten berbahaya. File otomatis dihapus'], 422);
-                }
-
-                // Pindahkan file yang telah discan ke storage utama
-                $path = $this->generateFilePath($folderId, $storageFileName);
-                Storage::put($path, file_get_contents($tempPath));
-
-                // Ambil ukuran file dari storage utama
-                $fileSize = Storage::size($path);
-
-                Log::info("File Temp: " . $tempPath);
-
-                // Hapus file sementara setelah dipindahkan
+            if ($scanResult->detected >= 1) {
+                // Hapus file jika terdeteksi virus
                 if (file_exists($tempPath)) {
                     unlink($tempPath);
                 }
+                DB::rollBack();
+                return response()->json(['errors' => 'File berisi konten berbahaya. File otomatis dihapus'], 422);
+            }
 
-                // generate path for public (exposed path for frontend)
-                $publicPath = $this->generateFilePublicPath($folderId, $originalFileName);
+            // Pindahkan file yang telah discan ke storage utama
+            $path = $this->generateFilePath($folderId, $storageFileName);
+            Storage::put($path, file_get_contents($tempPath));
 
-                // Buat catatan file di database
-                $file = File::create([
-                    'name' => $originalFileName,
-                    'path' => $path,
-                    'public_path' => $publicPath,
-                    'size' => $fileSize, // Catatan: ukuran dalam satuan byte!
-                    'type' => $fileExtension,
-                    'user_id' => $user->id,
-                    'folder_id' => $folderId,
-                    'nanoid' => $nanoid,
-                ]);
+            // Ambil ukuran file dari storage utama
+            $fileSize = Storage::size($path);
 
-                $file->instances()->sync($userInstances);
+            Log::info("File Temp: " . $tempPath);
 
-                if ($request->has('tags')) {
-                    // Proses tags
-                    $tagIds = [];
+            // Hapus file sementara setelah dipindahkan
+            if (file_exists($tempPath)) {
+                unlink($tempPath);
+            }
 
-                    foreach ($request->tags as $tagName) {
-                        // Periksa apakah tag sudah ada di database (case-insensitive)
-                        $tag = Tags::whereRaw('LOWER(name) = ?', [strtolower($tagName)])->first();
+            // generate path for public (exposed path for frontend)
+            $publicPath = $this->generateFilePublicPath($folderId, $originalFileName);
 
-                        if (!$tag) {
-                            // Jika tag belum ada, buat tag baru
-                            $tag = Tags::create(['name' => ucfirst($tagName)]);
-                        }
+            // Buat catatan file di database
+            $file = File::create([
+                'name' => $originalFileName,
+                'path' => $path,
+                'public_path' => $publicPath,
+                'size' => $fileSize, // Catatan: ukuran dalam satuan byte!
+                'type' => $fileExtension,
+                'user_id' => $user->id,
+                'folder_id' => $folderId,
+                'nanoid' => $nanoid,
+            ]);
 
-                        // Ambil id dari tag (baik yang sudah ada atau baru dibuat)
-                        $tagIds[] = $tag->id;
+            $file->instances()->sync($userInstances);
 
-                        // Masukkan id dan name dari tag ke dalam array untuk response
-                        $tagsData[] = [
-                            'id' => $tag->id,
-                            'name' => $tag->name
-                        ];
+            if ($request->has('tags')) {
+                // Proses tags
+                $tagIds = [];
+
+                foreach ($request->tags as $tagName) {
+                    // Periksa apakah tag sudah ada di database (case-insensitive)
+                    $tag = Tags::whereRaw('LOWER(name) = ?', [strtolower($tagName)])->first();
+
+                    if (!$tag) {
+                        // Jika tag belum ada, buat tag baru
+                        $tag = Tags::create(['name' => ucfirst($tagName)]);
                     }
 
-                    $file->tags()->sync($tagIds);
+                    // Ambil id dari tag (baik yang sudah ada atau baru dibuat)
+                    $tagIds[] = $tag->id;
 
-                    $file['tags'] = $tagsData;
+                    // Masukkan id dan name dari tag ke dalam array untuk response
+                    $tagsData[] = [
+                        'id' => $tag->id,
+                        'name' => $tag->name
+                    ];
                 }
 
-                $file->makeHidden(['path', 'nanoid']);
+                $file->tags()->sync($tagIds);
 
-                $file->load(['user:id,name,email', 'instances:id,name']);
-
-                // Tambahkan file ke dalam array yang akan dikembalikan
-                $filesData[] = $file;
+                $file['tags'] = $tagsData;
             }
+
+            $file->makeHidden(['path', 'nanoid']);
+
+            $file->load(['user:id,name,email', 'instances:id,name']);
+
+            // Tambahkan file ke dalam array yang akan dikembalikan
 
             // COMMIT TRANSACTION JIKA TIDAK ADA ERROR
             DB::commit();
@@ -360,7 +358,7 @@ class FileController extends Controller
             return response()->json([
                 'message' => 'Files uploaded successfully.',
                 'data' => [
-                    'files' => $filesData,
+                    'files' => $file,
                 ],
             ], 201);
         } catch (Exception $e) {
