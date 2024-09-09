@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('user_id')->references('id')->on('users')->cascadeOnDelete();
             $table->foreignId('folder_id')->references('id')->on('folders')->cascadeOnDelete();
-            $table->json('permissions');
+            $table->enum('permissions', ['read', 'write']);
             $table->timestamps();
         });
     }

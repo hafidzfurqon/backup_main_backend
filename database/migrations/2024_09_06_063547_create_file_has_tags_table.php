@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('file_has_tags', function (Blueprint $table) {
             $table->id();
             $table->foreignId('file_id')->references('id')->on('files')->cascadeOnDelete();
-            $table->foreignId('tag_id')->references('id')->on('tags')->cascadeOnDelete();
+            $table->foreignId('tags_id')->references('id')->on('tags')->cascadeOnDelete();
             $table->timestamps();
         });
     }

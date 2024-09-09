@@ -14,17 +14,13 @@ class UserFilePermission extends Model
         'user_id', 'file_id', 'permissions'
     ];
 
-    protected $casts = [
-        'permissions' => 'array', // Secara otomatis meng-cast JSON ke array
-    ];
-
-    public function users(): BelongsTo
+    public function user(): BelongsTo
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'user_id');
     }
 
-    public function files(): BelongsTo
+    public function file(): BelongsTo
     {
-        return $this->belongsTo(File::class);
+        return $this->belongsTo(File::class, 'file_id');
     }
 }

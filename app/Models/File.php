@@ -10,25 +10,16 @@ class File extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'nanoid', 'path', 'size', 'type', 'user_id', 'folder_id'];
-
-    protected static function boot()
-    {
-        parent::boot();
-
-        // Automatically generate a NanoID when creating a new folder
-        static::creating(function ($model) {
-            if (empty($model->nanoid)) {
-                $model->nanoid = self::generateNanoId();
-            }
-        });
-    }
-
-    public static function generateNanoId($size = 21)
-    {
-        return (new \Hidehalo\Nanoid\Client())->generateId($size);
-    }
-
+    protected $fillable = [
+        'name',
+        'nanoid',
+        'path',
+        'public_path',
+        'size',
+        'type',
+        'user_id',
+        'folder_id'
+    ];
 
     public function user()
     {
@@ -51,8 +42,7 @@ class File extends Model
     }
 
     public function instances(): BelongsToMany
-     {
-         return $this->belongsToMany(Instance::class, 'file_has_instances')->withTimestamps(); // menggunakan tabel pivot untuk menyalakan otomatisasi timestamp().
-     }
-
+    {
+        return $this->belongsToMany(Instance::class, 'file_has_instances')->withTimestamps(); // menggunakan tabel pivot untuk menyalakan otomatisasi timestamp().
+    }
 }

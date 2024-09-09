@@ -11,6 +11,8 @@ class Tags extends Model
 
     protected $fillable = ['name'];
 
+    protected $hidden = ['pivot'];
+
     protected $table = 'tags';
 
     public function folders()

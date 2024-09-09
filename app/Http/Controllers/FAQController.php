@@ -20,7 +20,7 @@ class FAQController extends Controller
         $this->checkAdminService = $checkAdminService;
     }
 
-    public function index()
+    public function index(Request $request)
     {
         $checkAdmin = $this->checkAdminService->checkAdmin();
 
@@ -45,9 +45,43 @@ class FAQController extends Controller
 
         } catch (\Exception $e) {
             Log::error('An error occurred while fetching FAQs: ' . $e->getMessage());
+            
             return response()->json([
                 'errors' => 'An error occurred while fetching FAQs.'
             ], 500);
+        }
+    }
+
+    public function showSpesificFAQ($id)
+    {
+        $checkAdmin = $this->checkAdminService->checkAdmin();
+
+        if(!$checkAdmin) {
+            return response()->json([
+                'errors' => 'You do not have permission to fetch FAQs.'
+            ], 403);
+        }
+        
+        try {
+
+            $faq = FAQ::find($id);
+            if (!$faq) {
+                return response()->json([
+                    'errors' => 'FAQ not found'
+                ], 404);
+            }
+
+            return response()->json([
+                'data' => $faq
+            ], 200);
+
+        } catch(\Exception $e) {
+            Log::error('Error occured while fetching spesific FAQ: ' . $e->getMessage());
+
+            return response()->json([
+                'errors' => 'An error occurred while fetching spesific FAQ.'
+            ], 500);
+
         }
     }
 

@@ -36,24 +36,10 @@ class PermissionFileController extends Controller
         return false;
     }
 
-    public function getAllPermissionOnFile(Request $request)
+    public function getAllPermissionOnFile($fileId)
     {
-        // Validasi request
-        $validator = Validator::make(
-            $request->all(),
-            [
-                'file_id' => 'required|integer|exists:files,id',
-            ]
-        );
-
-        if ($validator->fails()) {
-            return response()->json([
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
         // Periksa apakah pengguna yang meminta memiliki izin untuk melihat perizinan file ini
-        $permission = $this->checkPermission($request->file_id);
+        $permission = $this->checkPermission($fileId);
         if (!$permission) {
             return response()->json([
                 'errors' => 'You do not have the authority to view permissions on this file.'
@@ -62,8 +48,8 @@ class PermissionFileController extends Controller
 
         try {
             // Ambil semua pengguna dengan izin yang terkait dengan file yang diberikan
-            $userFilePermissions = UserFilePermission::with('users')
-                ->where('file_id', $request->file_id)
+            $userFilePermissions = UserFilePermission::with('user')
+                ->where('file_id', $fileId)
                 ->get();
 
             if ($userFilePermissions->isEmpty()) {
@@ -76,24 +62,24 @@ class PermissionFileController extends Controller
             $responseData = [];
             foreach ($userFilePermissions as $permission) {
                 $responseData[] = [
-                    'user_id' => $permission->users->id,
-                    'user_name' => $permission->users->name,
+                    'user_id' => $permission->user->id,
+                    'user_name' => $permission->user->name,
                     'permissions' => $permission->permissions
                 ];
             }
 
             return response()->json([
-                'message' => 'List of users with permissions on file successfully retrieved.',
+                'message' => 'List of user with permissions on file successfully retrieved.',
                 'data' => $responseData
             ], 200);
         } catch (Exception $e) {
-            Log::error('Error occurred while retrieving users with permissions for file: ' . $e->getMessage(), [
-                'file_id' => $request->file_id,
+            Log::error('Error occurred while retrieving user with permissions for file: ' . $e->getMessage(), [
+                'file_id' => $fileId,
                 'trace' => $e->getTraceAsString(),
             ]);
 
             return response()->json([
-                'errors' => 'An error occurred while retrieving the list of users with permissions for this file.'
+                'errors' => 'An error occurred while retrieving the list of user with permissions for this file.'
             ], 500);
         }
     }
@@ -103,7 +89,7 @@ class PermissionFileController extends Controller
         $validator = Validator::make(
             request()->all(),
             [
-                'user_id' => 'required|integer|exists:users,id',
+                'user_id' => 'required|integer|exists:user,id',
                 'file_id' => 'required|integer|exists:files,id',
             ],
         );
@@ -124,14 +110,14 @@ class PermissionFileController extends Controller
         try {
             $userFilePermission = UserFilePermission::where('user_id', $request->user_id)->where('file_id', $request->file_id)->first();
 
-            if (!$userFilePermission) {
+            if ($userFilePermission == null) {
                 return response()->json([
-                    'errors' => 'User has not have any permission in file: ' . $userFilePermission->files->name
+                    'errors' => 'Permission not found.'
                 ], 404);
             }
 
             return response()->json([
-                'message' => 'User ' . $userFilePermission->users->name . ' has get some permission to file: ' . $userFilePermission->files->name,
+                'message' => 'User ' . $userFilePermission->user->name . ' has get some permission to file: ' . $userFilePermission->file->name,
                 'data' => $userFilePermission
             ]);
         } catch (Exception $e) {
@@ -142,14 +128,14 @@ class PermissionFileController extends Controller
         }
     }
 
-    public function grantfilePermission(Request $request)
+    public function grantFilePermission(Request $request)
     {
         $validator = Validator::make(
             request()->all(),
             [
-                'user_id' => 'required|integer|exists:users,id',
+                'user_id' => 'required|integer|exists:user,id',
                 'file_id' => 'required|integer|exists:files,id',
-                'permissions' => 'required|array|only:file_read,file_edit,file_delete',
+                'permissions' => 'required|in:read,write',
             ],
         );
 
@@ -157,6 +143,14 @@ class PermissionFileController extends Controller
             return response()->json([
                 'errors' => $validator->errors()
             ], 422);
+        }
+
+        // Cek apakah user yang dimaksud adalah pemilik file
+        $file = File::find($request->file_id);
+        if ($file->user_id == $request->user_id) {
+            return response()->json([
+                'errors' => 'You cannot modify permissions for the owner of the file.'
+            ], 403);
         }
 
         // check if the user who owns the file will grant permissions.
@@ -186,10 +180,9 @@ class PermissionFileController extends Controller
             DB::commit();
 
             return response()->json([
-                'message' => 'User ' . $userFilePermission->users->name . ' has been granted permission ' . $userFilePermission->permissions . ' to file: ' . $userFilePermission->files->name,
+                'message' => 'User ' . $userFilePermission->user->name . ' has been granted permission ' . $userFilePermission->permissions . ' to file: ' . $userFilePermission->file->name,
                 'data' => $userFilePermission
             ], 200);
-
         } catch (Exception $e) {
             DB::rollBack();
 
@@ -205,9 +198,9 @@ class PermissionFileController extends Controller
         $validator = Validator::make(
             request()->all(),
             [
-                'user_id' => 'required|integer|exists:users,id',
+                'user_id' => 'required|integer|exists:user,id',
                 'file_id' => 'required|integer|exists:files,id',
-                'permissions' => 'required|array|only:file_read,file_edit,file_delete',
+                'permissions' => 'required|in:read,write',
             ],
         );
 
@@ -215,6 +208,14 @@ class PermissionFileController extends Controller
             return response()->json([
                 'errors' => $validator->errors()
             ], 422);
+        }
+
+        // Cek apakah user yang dimaksud adalah pemilik file
+        $file = File::find($request->file_id);
+        if ($file->user_id == $request->user_id) {
+            return response()->json([
+                'errors' => 'You cannot modify permissions for the owner of the file.'
+            ], 403);
         }
 
         // check if the user who owns the file will revoke permissions.
@@ -230,19 +231,19 @@ class PermissionFileController extends Controller
         try {
             $userFilePermission = UserFilePermission::where('user_id', $request->user_id)->where('file_id', $request->file_id)->first();
 
-            if (!$userFilePermission) {
+            if ($userFilePermission == null) {
                 return response()->json([
                     'errors' => 'The user whose permissions you want to change is not registered in the permissions data.'
                 ], 404);
             }
 
             // custom what permission to be revoked
-            $userFilePermission->permissions = array_diff($userFilePermission->permissions, $request->permissions);
+            $userFilePermission->permissions = $request->permissions;
             $userFilePermission->save();
             DB::commit();
 
             return response()->json([
-                'message' => 'User' . $userFilePermission->users->name . ' has been successfully changed permissions on file: ' . $userFilePermission->files->name,
+                'message' => 'User' . $userFilePermission->user->name . ' has been successfully changed permissions on file: ' . $userFilePermission->file->name,
                 'data' => $userFilePermission
             ], 200);
         } catch (Exception $e) {
@@ -255,7 +256,7 @@ class PermissionFileController extends Controller
         }
     }
 
-    public function revokeAllfilePermission(Request $request)
+    public function revokeFilePermission(Request $request)
     {
         $validator = Validator::make(
             request()->all(),
@@ -271,6 +272,14 @@ class PermissionFileController extends Controller
             ], 422);
         }
 
+        // Cek apakah user yang dimaksud adalah pemilik file
+        $file = File::find($request->file_id);
+        if ($file->user_id == $request->user_id) {
+            return response()->json([
+                'errors' => 'You cannot modify permissions for the owner of the file.'
+            ], 403);
+        }
+
         // check if the user who owns the file will revoke permissions.
         $permission = $this->checkPermission($request->file_id);
         if (!$permission) {
@@ -284,7 +293,7 @@ class PermissionFileController extends Controller
         try {
             $userFilePermission = UserFilePermission::where('user_id', $request->user_id)->where('file_id', $request->file_id)->first();
 
-            if (!$userFilePermission) {
+            if ($userFilePermission == null) {
                 return response()->json([
                     'errors' => 'The user whose permissions you want to revoke is not registered in the permissions data.'
                 ], 404);
@@ -294,7 +303,7 @@ class PermissionFileController extends Controller
             DB::commit();
 
             return response()->json([
-                'message' => 'All permission for user ' . $userFilePermission->users->name . ' on file ' . $userFilePermission->files->name . ' has been revoked.'
+                'message' => 'All permission for user ' . $userFilePermission->user->name . ' on file ' . $userFilePermission->file->name . ' has been revoked.'
             ], 200);
         } catch (Exception $e) {
             DB::rollBack();

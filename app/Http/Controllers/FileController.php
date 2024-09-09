@@ -13,18 +13,140 @@ use Illuminate\Support\Facades\Validator;
 use AMWScan\Scanner;
 use App\Models\Tags;
 use App\Models\User;
+use App\Models\UserFilePermission;
+use App\Models\UserFolderPermission;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class FileController extends Controller
 {
     /**
+     * Check the user permission for file
+     */
+    private function checkPermissionFile($fileId, $actions)
+    {
+        $user = Auth::user();
+        $file = File::find($fileId);
+
+        // If file not found, return 404 error and stop the process
+        if (!$file) {
+            return response()->json([
+                'errors' => 'Folder with Folder ID you entered not found, Please check your Folder ID and try again.'
+            ], 404); // Setting status code to 404 Not Found
+        }
+
+        // Step 1: Check if the file belongs to the logged-in user
+        if ($file->user_id === $user->id) {
+            return true; // The owner has all permissions
+        }
+
+        // step ???? cek apakah user yang login adalah admin dan memiliki privilege SUPERADMIN
+        if ($user->hasRole('admin') && $user->is_superadmin == 1) {
+            return true;
+        }
+        // jika hanya admin dan tidak ada privilege SUPERADMIN, kembalikan false (tidak diizinkan) 
+        else if ($user->hasRole('admin')) {
+            return false;
+        }
+
+        // step 2 tentang group berisi user dengan permission setiap user pada group berbeda beda, masih coming soon...
+
+        // Step 3: Check if user has granted permission with the file
+        $userFilePermission = UserFilePermission::where('user_id', $user->id)->where('file_id', $file->id)->first();
+        if ($userFilePermission) {
+            $checkPermission = $userFilePermission->permissions;
+           
+             // Jika $actions adalah string, ubah menjadi array agar lebih mudah diperiksa
+             if (!is_array($actions)) {
+                $actions = [$actions];
+            }
+
+            // Periksa apakah izin pengguna ada di array $actions
+            if (in_array($checkPermission, $actions)) {
+                return true;
+            }
+        }
+
+        // Step 4 check if user has permission on folder where file is located
+        $folder = Folder::find($file->folder_id);
+        if ($folder) {
+            $folderPermission = UserFolderPermission::where('user_id', $user->id)->where('folder_id', $folder->id)->first();
+            if ($folderPermission) {
+                $checkPermission = $folderPermission->permissions;
+
+                if(!is_array($actions)){
+                    $actions = [$actions];
+                }
+
+                if (in_array($checkPermission, $actions)) {
+                    return true;
+                }
+            }
+        }
+
+        // return false if all steps are not passed
+        return false;
+    }
+
+    /**
+     * Check user permission for folder
+     */
+    private function checkPermissionFolder($folderId, $action)
+    {
+        $user = Auth::user();
+        $folder = Folder::find($folderId);
+
+        // If folder not found, return 404 error and stop the process
+        if (!$folder) {
+            return response()->json([
+                'errors' => 'Folder with Folder ID you entered not found, Please check your Folder ID and try again.'
+            ], 404); // Setting status code to 404 Not Found
+        }
+
+        // Step 1: Check if the folder belongs to the logged-in user
+        if ($folder->user_id === $user->id) {
+            return true; // The owner has all permissions
+        }
+
+        // step ???? cek apakah user yang login adalah admin dan memiliki privilege SUPERADMIN
+        if ($user->hasRole('admin') && $user->is_superadmin == 1) {
+            return true;
+        }
+        // jika hanya admin dan tidak ada privilege SUPERADMIN, kembalikan false (tidak diizinkan) 
+        else if ($user->hasRole('admin')) {
+            return false;
+        }
+
+        // step 2 tentang group berisi user dengan permission setiap user pada group berbeda beda, masih coming soon...
+
+        // Step 3: Check if user has granted permission with the folder
+        $userFolderPermission = UserFolderPermission::where('user_id', $user->id)->where('folder_id', $folder->id)->first();
+        if ($userFolderPermission) {
+            $checkPermission = $userFolderPermission->permissions;
+            if (in_array($action, $checkPermission)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Get information about a file (READ).
      */
     public function info($id)
     {
+        $checkPermission = $this->checkPermissionFile($id, ['read', 'write']);
+
+        if (!$checkPermission) {
+            return response()->json([
+                'errors' => 'You do not have permission to view this file.',
+            ]);
+        }
+
         try {
-            $file = File::with(['tags', 'instances'])->find($id);
+            $file = File::with(['user:id,name,email', 'tags', 'instances:id,name'
+            ])->find($id);
 
             if (!$file) {
                 return response()->json([
@@ -58,10 +180,12 @@ class FileController extends Controller
     // dapatkan semua file dan total filenya
     public function getAllFilesAndTotalSize()
     {
+
         $user = Auth::user();
+
         try {
             // Ambil semua file dari database
-            $files = File::where('user_id', $user->id)->with(['tags', 'instances'])->get();
+            $files = File::where('user_id', $user->id)->with(['user:id,name,email', 'tags', 'instances:id,name'])->get();
 
             // Hitung total ukuran semua file
             $totalSize = $files->sum('size');
@@ -81,104 +205,6 @@ class FileController extends Controller
 
             return response()->json([
                 'error' => 'An error occurred while fetching all files and total size.'
-            ], 500);
-        }
-    }
-
-
-    /**
-     * Create a new text file (CREATE).
-     */
-    public function create(Request $request)
-    {
-        $userId = Auth::id();
-
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string',  // Nama file yang akan dibuat
-            'content' => 'nullable|string', // Konten file, bisa kosong
-            'folder_id' => 'nullable|integer|exists:folders,id',
-            'tags' => 'nullable|array',
-            'tags.*' => ['string', 'regex:/^[a-zA-Z\s]+$/'],
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
-
-        DB::beginTransaction();
-
-        try {
-            // Generate file path berdasarkan folder_id (jika ada)
-            $path = $this->generateFilePath($request->folder_id, $request->name);
-
-            // Simpan file teks ke storage dengan konten yang diberikan (jika ada)
-            Storage::put($path, $request->input('content', ''));
-
-            // Dapatkan ukuran file yang baru disimpan
-            $size = Storage::size($path);
-
-            // Simpan informasi file ke database
-            $file = File::create([
-                'name' => $request->name,
-                'path' => $path,
-                'size' => $size, // Catatan: ukuran dalam satuan byte!
-                'mime_type' => 'text/plain', // Set tipe MIME untuk file teks
-                'user_id' => $request->user()->id,
-                'folder_id' => $request->folder_id,
-            ]);
-
-            $userData = User::where('id', $userId)->first();
-
-            $userInstance = $userData->instances->pluck('id')->toArray();  // Mengambil instance user
-            $file->instances()->sync($userInstance);  // Sinkronisasi instance ke folder baru
-
-            if ($request->tags) {
-                // Proses tags
-                $tagIds = [];
-
-                foreach ($request->tags as $tagName) {
-                    // Periksa apakah tag sudah ada di database (case-insensitive)
-                    $tag = Tags::whereRaw('LOWER(name) = ?', [strtolower($tagName)])->first();
-
-                    if (!$tag) {
-                        // Jika tag belum ada, buat tag baru
-                        $tag = Tags::create(['name' => ucfirst($tagName)]);
-                    }
-
-                    // Ambil id dari tag (baik yang sudah ada atau baru dibuat)
-                    $tagIds[] = $tag->id;
-
-                    // Masukkan id dan name dari tag ke dalam array untuk response
-                    $tagsData[] = [
-                        'id' => $tag->id,
-                        'name' => $tag->name
-                    ];
-                }
-
-                $file->tags()->sync($tagIds);
-            }
-
-            DB::commit();
-
-            $file->makeHidden(['path', 'nanoid']);
-
-            $file['tags'] = $tagsData;
-
-            $file->load('instances');
-
-            return response()->json([
-                'message' => 'File created and saved to storage successfully.',
-                'data' => $file,
-            ], 201);
-        } catch (Exception $e) {
-            DB::rollBack();
-
-            Log::error('Error occurred on creating a file: ' . $e->getMessage(), [
-                'trace' => $e->getTraceAsString(),
-            ]);
-
-            return response()->json([
-                'errors' => 'An error occurred while creating the file.',
             ], 500);
         }
     }
@@ -203,6 +229,20 @@ class FileController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        // Tentukan folder tujuan jika folder_id tidak null
+        if ($request->has('folder_id')) {
+
+            $folderId = $request->folder_id;
+
+            // Periksa apakah user memiliki izin ke folder tujuan
+            $permissionCheck = $this->checkPermissionFolder($folderId, 'folder_edit');
+            if (!$permissionCheck) {
+                return response()->json([
+                    'errors' => 'You do not have permission to upload files to the destination folder.',
+                ], 403);
+            }
+        }
+
         // START MYSQL TRANSACTION
         DB::beginTransaction();
 
@@ -213,7 +253,9 @@ class FileController extends Controller
             $userInstances = $userData->instances->pluck('id')->toArray();  // Mengambil instance user
 
             foreach ($request->file('file') as $uploadedFile) {
+
                 $originalFileName = $uploadedFile->getClientOriginalName(); // Nama asli file
+
                 $fileExtension = $uploadedFile->getClientOriginalExtension(); // Ekstensi file
 
                 // Generate NanoID untuk nama file
@@ -254,10 +296,14 @@ class FileController extends Controller
                     unlink($tempPath);
                 }
 
+                // generate path for public (exposed path for frontend)
+                $publicPath = $this->generateFilePublicPath($folderId, $originalFileName);
+
                 // Buat catatan file di database
                 $file = File::create([
                     'name' => $originalFileName,
                     'path' => $path,
+                    'public_path' => $publicPath,
                     'size' => $fileSize, // Catatan: ukuran dalam satuan byte!
                     'type' => $fileExtension,
                     'user_id' => $user->id,
@@ -267,7 +313,7 @@ class FileController extends Controller
 
                 $file->instances()->sync($userInstances);
 
-                if ($request->tags) {
+                if ($request->has('tags')) {
                     // Proses tags
                     $tagIds = [];
 
@@ -297,7 +343,7 @@ class FileController extends Controller
 
                 $file->makeHidden(['path', 'nanoid']);
 
-                $file->load('instances');
+                $file->load(['user:id,name,email', 'instances:id,name']);
 
                 // Tambahkan file ke dalam array yang akan dikembalikan
                 $filesData[] = $file;
@@ -356,12 +402,12 @@ class FileController extends Controller
         }
 
         // Periksa perizinan
-        // $permissionCheck = $this->checkPermissionFolder($request->folder_id, 'folder_edit');
-        // if (!$permissionCheck) {
-        //     return response()->json([
-        //         'errors' => 'You do not have permission to add tag to this folder.',
-        //     ], 403);
-        // }
+        $permissionCheck = $this->checkPermissionFile($request->file_id, 'write');
+        if (!$permissionCheck) {
+            return response()->json([
+                'errors' => 'You do not have permission to add tag to this file.',
+            ], 403);
+        }
 
         DB::beginTransaction();
 
@@ -381,13 +427,12 @@ class FileController extends Controller
 
             DB::commit();
 
+            $file->load(['user:id,name,email', 'tags', 'instances:id,name']);
+
             return response()->json([
                 'message' => 'Successfully added tag to file.',
                 'data' => [
-                    'file_id' => $file->id,
-                    'file_name' => $file->name,
-                    'tag_id' => $tag->id,
-                    'tag_name' => $tag->name
+                    'file' => $file
                 ]
             ], 200);
         } catch (ModelNotFoundException $e) {
@@ -430,6 +475,14 @@ class FileController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        // Periksa apakah user memiliki perizinan pada file
+        $permissionCheck = $this->checkPermissionFile($request->file_id, 'write');
+        if (!$permissionCheck) {
+            return response()->json([
+                'errors' => 'You do not have permission to remove tag from this file.',
+            ], 403);
+        }
+
         DB::beginTransaction();
 
         try {
@@ -447,6 +500,8 @@ class FileController extends Controller
             $file->tags()->detach($tag->id);
 
             DB::commit();
+
+            $file->load(['user:id,name,email', 'tags', 'instances:id,name']);
 
             return response()->json([
                 'message' => 'Successfully removed tag from file.',
@@ -480,7 +535,7 @@ class FileController extends Controller
     /**
      * Update the name of a file.
      */
-    public function updateFile(Request $request, $id)
+    public function updateFileName(Request $request, $id)
     {
         $validator = Validator::make($request->all(), [
             'name' => 'required|string',
@@ -490,25 +545,56 @@ class FileController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
+        // Periksa apakah user memiliki perizinan pada file
+        $permissionCheck = $this->checkPermissionFile($id, 'write');
+        if (!$permissionCheck) {
+            return response()->json([
+                'errors' => 'You do not have permission to edit this file.',
+            ], 403);
+        }
+
         DB::beginTransaction();
 
         try {
             $file = File::findOrFail($id);
 
+            // Dapatkan ekstensi asli dari nama file yang ada
+            $currentFileNameWithExtension = $file->name;
+            $originalExtension = pathinfo($currentFileNameWithExtension, PATHINFO_EXTENSION); // Ekstensi asli
+
+            // Hapus ekstensi dari nama baru yang dimasukkan user
+            $newFileNameWithoutExtension = pathinfo($request->name, PATHINFO_FILENAME);
+
+            // Gabungkan nama baru dengan ekstensi asli
+            $newFileName = $newFileNameWithoutExtension . '.' . $originalExtension;
+
+            // Ambil Nanoid dari database
+            $fileNanoid = $file->nanoid;
+
+            // Gunakan Nanoid untuk nama file pada storage lokal laravel
+            $storageFileName = $fileNanoid . '.' . $originalExtension;
+
             // Update file name in storage
             $oldFullPath = $file->path;
-            $newPath = $this->generateFilePath($file->folder_id, $file->nanoid);
+            $newPath = $this->generateFilePath($file->folder_id, $storageFileName);
+
+            $publicPath = $this->generateFilePublicPath($file->folder_id, $newFileName);
 
             if (Storage::exists($oldFullPath)) {
                 Storage::move($oldFullPath, $newPath);
             }
 
-            // Update file name in database
-            $file->name = $request->name;
-            $file->path = $newPath;
-            $file->save();
+            // Update nama file di database dengan ekstensi yang tidak berubah
+            $file->update([
+                'nanoid' => $fileNanoid,
+                'name' => $newFileName, // Nama baru dengan ekstensi asli
+                'path' => $newPath,
+                'public_path' => $publicPath,
+            ]);
 
             DB::commit();
+
+            $file->load(['user:id,name,email', 'tags', 'instances:id,name']);
 
             $file->makeHidden(['path', 'nanoid']);
 
@@ -535,6 +621,102 @@ class FileController extends Controller
     }
 
     /**
+     * Move a file to another folder.
+     */
+    public function move(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'new_folder_id' => 'required|integer|exists:folders,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        // Periksa apakah user memiliki izin pada file
+        $permissionCheck = $this->checkPermissionFile($id, 'write');
+        if (!$permissionCheck) {
+            return response()->json([
+                'errors' => 'You do not have permission to move this file.',
+            ], 403);
+        }
+
+        // Periksa apakah user memiliki izin ke folder tujuan
+        $permissionFolderCheck = $this->checkPermissionFolder($request->new_folder_id, 'folder_edit');
+        if (!$permissionFolderCheck) {
+            return response()->json([
+                'errors' => 'You do not have permission on the destination folder.',
+            ], 403);
+        }
+
+        DB::beginTransaction();
+
+        try {
+            $file = File::findOrFail($id);
+            $oldPath = $file->path;
+
+            // Intinya, kode dibawah ini adalah persiapan untuk menyiapkan path baru.
+            $fileExtension = pathinfo($file->name, PATHINFO_EXTENSION);
+
+            $fileNameWithNanoid = $file->nanoid . '.' . $fileExtension;
+
+            // Generate new path
+            $newPath = $this->generateFilePath($request->new_folder_id, $fileNameWithNanoid);
+
+            $newPublicPath = $this->generateFilePublicPath($request->new_folder_id, $file->name);
+
+            // Check if old file path exists
+            if (!Storage::exists($oldPath)) {
+                return response()->json(['errors' => 'Old file path does not exist.'], 404);
+            }
+
+            // Move file in storage
+            if (Storage::exists($oldPath)) {
+                // Ensure the new directory exists
+                $newDirectory = dirname($newPath);
+                if (!Storage::exists($newDirectory)) {
+                    Storage::makeDirectory($newDirectory);
+                }
+
+                Storage::move($oldPath, $newPath);
+            }
+
+            // Update file record in database
+            $file->update([
+                'folder_id' => $request->new_folder_id,
+                'path' => $newPath,
+                'public_path' => $newPublicPath,
+            ]);
+
+            DB::commit();
+
+            $file->load(['user:id,name,email', 'tags', 'instances:id,name']);
+
+            $file->makeHidden(['path', 'nanoid']);
+
+            return response()->json([
+                'message' => 'File moved successfully.',
+                'data' => $file,
+            ], 200);
+        } catch (ModelNotFoundException $e) {
+            return response()->json([
+                'errors' => 'File not found.',
+            ], 404);
+        } catch (Exception $e) {
+            DB::rollBack();
+
+            Log::error('Error occurred while moving file: ' . $e->getMessage(), [
+                'fileId' => $id,
+                'newFolderId' => $request->new_folder_id,
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return response()->json([
+                'errors' => 'An error occurred while moving the file.',
+            ], 500);
+        }
+    }
+
+    /**
      * Delete a file (DELETE).
      * DANGEROUS!
      */
@@ -547,6 +729,16 @@ class FileController extends Controller
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        // Periksa apakah user mendapatkan perizinan pada file
+        foreach ($request->file_ids as $fileId) {
+            $permissionCheck = $this->checkPermissionFile($fileId, 'write');
+            if (!$permissionCheck) {
+                return response()->json([
+                    'errors' => 'You do not have permission to delete this file.',
+                ], 403);
+            }
         }
 
         $fileIds = $request->file_ids;
@@ -594,73 +786,31 @@ class FileController extends Controller
         }
     }
 
-    /**
-     * Move a file to another folder.
-     */
-    public function move(Request $request, $id)
+    public function generateFilePublicPath($folderId, $fileName)
     {
-        $validator = Validator::make($request->all(), [
-            'new_folder_id' => 'required|integer|exists:folders,id',
-        ]);
+        // Initialize an array to store the folder names
+        $path = [];
 
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
+        // If folderId is provided, build the path from the folder to the root
+        while ($folderId) {
+            // Find the folder by ID
+            $folder = Folder::find($folderId);
+            if ($folder) {
+                // Prepend the folder name to the path array
+                array_unshift($path, $folder->name);
+                // Set the folder ID to its parent folder's ID
+                $folderId = $folder->parent_id;
+            } else {
+                // If the folder is not found, stop the loop
+                break;
+            }
         }
 
-        DB::beginTransaction();
+        // Add the file name to the end of the path
+        $path[] = $fileName;
 
-        try {
-            $file = File::findOrFail($id);
-            $oldPath = $file->path;
-
-            // Generate new path
-            $newPath = $this->generateFilePath($request->new_folder_id, $file->nanoid);
-
-            // Check if old file path exists
-            if (!Storage::exists($oldPath)) {
-                return response()->json(['errors' => 'Old file path does not exist.'], 404);
-            }
-
-            // Move file in storage
-            if (Storage::exists($oldPath)) {
-                // Ensure the new directory exists
-                $newDirectory = dirname($newPath);
-                if (!Storage::exists($newDirectory)) {
-                    Storage::makeDirectory($newDirectory);
-                }
-
-                Storage::move($oldPath, $newPath);
-            }
-
-            // Update file record in database
-            $file->folder_id = $request->new_folder_id;
-            $file->path = $newPath;
-            $file->save();
-
-            DB::commit();
-
-            $file->makeHidden(['path', 'nanoid']);
-
-            return response()->json([
-                'message' => 'File moved successfully.',
-                'data' => $file,
-            ], 200);
-        } catch (ModelNotFoundException $e) {
-            return response()->json([
-                'errors' => 'File not found.',
-            ], 404);
-        } catch (Exception $e) {
-            DB::rollBack();
-
-            Log::error('Error occurred while moving file: ' . $e->getMessage(), [
-                'fileId' => $id,
-                'newFolderId' => $request->new_folder_id,
-                'trace' => $e->getTraceAsString(),
-            ]);
-            return response()->json([
-                'errors' => 'An error occurred while moving the file.',
-            ], 500);
-        }
+        // Join the path array into a single string
+        return implode('/', $path);
     }
 
     /**

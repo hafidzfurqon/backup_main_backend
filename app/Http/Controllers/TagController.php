@@ -27,7 +27,7 @@ class TagController extends Controller
 
         if (!$checkAdmin) {
             return response()->json([
-                'errors' => 'Anda tidak memiliki izin untuk melihat semua tag.'
+                'errors' => 'You are not allowed to perform this action.'
             ], 403);
         }
 
@@ -39,7 +39,7 @@ class TagController extends Controller
 
                 if ($allTag->isEmpty()) {
                     return response()->json([
-                        'errors' => 'Data tag tidak ditemukan.'
+                        'errors' => 'Tag data not found.'
                     ], 404);
                 }
 
@@ -51,10 +51,10 @@ class TagController extends Controller
             }
         } catch (\Exception $e) {
 
-            Log::error('Terjadi kesalahan saat mendapatkan data tag: ' . $e->getMessage());
+            Log::error('Error occured while fetching tag data: ' . $e->getMessage());
 
             return response()->json([
-                'errors' => 'Terjadi kesalahan saat mendapatkan data tag.'
+                'errors' => 'An error occurred while fetching tag data.'
             ], 500);
         }
     }
@@ -65,7 +65,7 @@ class TagController extends Controller
 
         if (!$checkAdmin) {
             return response()->json([
-                'errors' => 'Anda tidak memiliki izin untuk melihat semua tag.'
+                'errors' => 'You are not allowed to perform this action.'
             ], 403);
         }
 
@@ -75,7 +75,7 @@ class TagController extends Controller
 
             if(!$tagData){
                 return response()->json([
-                    'errors' => 'Tag tidak ditemukan.'
+                    'errors' => 'Tag not found.'
                 ]);
             }
 
@@ -84,9 +84,9 @@ class TagController extends Controller
             ]);
             
         } catch (\Exception $e) {
-            Log::error('Terjadi kesalahan saat mendapatkan data tag: ' . $e->getMessage());
+            Log::error('Error occured while fetching tag data: ' . $e->getMessage());
             return response()->json([
-                'errors' => 'Terjadi kesalahan saat mendapatkan data tag.'
+                'errors' => 'An error occurred while fetching tag data.'
             ], 500);
         }
     }
@@ -97,7 +97,7 @@ class TagController extends Controller
 
         if (!$checkAdmin) {
             return response()->json([
-                'errors' => 'Anda tidak memiliki izin untuk menambahkan tag.'
+                'errors' => 'You are not allowed to perform this action.'
             ], 403);
         }
 
@@ -111,7 +111,7 @@ class TagController extends Controller
                     Rule::unique('tags')->where(function ($query) {
                         return $query->whereRaw('LOWER(name) = ?', [strtolower(request('name'))]);
                     }),
-                    'regex:/^[a-z]+$/', // Prevent mixed letters/numbers (can adjust if needed)
+                    'regex:/^[a-zA-Z\s]+$/',
                 ],
             ]);
 
@@ -125,16 +125,16 @@ class TagController extends Controller
             DB::commit();
 
             return response()->json([
-                'message' => 'Tag berhasil dibuat',
+                'message' => 'Tag created successfully.',
                 'data' => $tag
             ], 200);
         } catch (\Exception $e) {
             DB::rollBack();
 
-            Log::error('Terjadi kesalahan saat membuat tag: ' . $e->getMessage());
+            Log::error('Error occured while creating tag: ' . $e->getMessage());
 
             return response()->json([
-                'errors' => 'Terjadi kesalahan saat membuat tag.'
+                'errors' => 'An error occurred while creating tag.'
             ], 500);
         }
     }
@@ -145,8 +145,25 @@ class TagController extends Controller
 
         if (!$checkAdmin) {
             return response()->json([
-                'errors' => 'Anda tidak memiliki izin untuk mengubah tag.'
+                'errors' => 'You are not allowed to perform this action.'
             ], 403);
+        }
+
+        // Validator with unique rule (case-insensitive check) and regex to prevent unclear letter/number mixes EXCLUDE the current tag ID
+        $validator = Validator::make($request->all(), [
+            'name' => [
+                'required',
+                // Ignore the current tag's ID during the uniqueness check
+                Rule::unique('tags')->where(function ($query) use ($request, $id) {
+                    return $query->whereRaw('LOWER(name) = ?', [strtolower($request->name)])
+                        ->where('id', '!=', $id); // Exclude the current tag ID
+                }),
+                'regex:/^[a-zA-Z\s]+$/', // Prevent mixed letters/numbers (can adjust if needed)
+            ],
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
         }
 
         DB::beginTransaction();
@@ -156,25 +173,8 @@ class TagController extends Controller
 
             if (!$tag) {
                 return response()->json([
-                    'errors' => 'Tag tidak ditemukan.'
+                    'errors' => 'Tag not found.'
                 ], 404);
-            }
-
-            // Validator with unique rule (case-insensitive check) and regex to prevent unclear letter/number mixes EXCLUDE the current tag ID
-            $validator = Validator::make($request->all(), [
-                'name' => [
-                    'required',
-                    // Ignore the current tag's ID during the uniqueness check
-                    Rule::unique('tags')->where(function ($query) use ($request, $id) {
-                        return $query->whereRaw('LOWER(name) = ?', [strtolower($request->name)])
-                            ->where('id', '!=', $id); // Exclude the current tag ID
-                    }),
-                    'regex:/^[a-z]+$/', // Prevent mixed letters/numbers (can adjust if needed)
-                ],
-            ]);
-
-            if ($validator->fails()) {
-                return response()->json(['errors' => $validator->errors()], 422);
             }
 
             // Update the tag
@@ -183,16 +183,16 @@ class TagController extends Controller
             DB::commit();
 
             return response()->json([
-                'message' => 'Tag berhasil diperbarui',
+                'message' => 'Tag updated successfully.',
                 'data' => $tag
             ], 200);
         } catch (\Exception $e) {
             DB::rollBack();
 
-            Log::error('Terjadi kesalahan saat memperbarui tag: ' . $e->getMessage());
+            Log::error('Error occured while updating tag: ' . $e->getMessage());
 
             return response()->json([
-                'errors' => 'Terjadi kesalahan saat memperbarui tag.'
+                'errors' => 'An error occurred while updating tag.'
             ], 500);
         }
     }
@@ -203,7 +203,7 @@ class TagController extends Controller
 
         if (!$checkAdmin) {
             return response()->json([
-                'errors' => 'Anda tidak memiliki izin untuk menghapus tag.'
+                'errors' => 'You are not allowed to perform this action.'
             ], 403);
         }
 
@@ -227,22 +227,31 @@ class TagController extends Controller
 
                 $tag = Tags::find($tag_id);
 
+                 // Cek apakah ada data pivot untuk folders
+                 if ($tag->folders()->exists()) {
+                    $tag->folders()->detach(); // Hapus relasi folder jika ada
+                }
+
+                // Cek apakah ada data pivot untuk files
+                if ($tag->files()->exists()) {
+                    $tag->files()->detach(); // Hapus relasi file jika ada
+                }
+
                 $tag->delete();
             }
 
             DB::commit();
 
             return response()->json([
-                'message' => 'Tag berhasil dihapus',
-                'data' => $tag
+                'message' => 'Tag deleted successfully.',
             ], 200);
         } catch (\Exception $e) {
             DB::rollBack();
 
-            Log::error('Terjadi kesalahan saat menghapus tag: ' . $e->getMessage());
+            Log::error('Error occured while deleting tag: ' . $e->getMessage());
 
             return response()->json([
-                'errors' => 'Terjadi kesalahan saat menghapus tag.'
+                'errors' => 'An error occurred while deleting tag.'
             ], 500);
         }
     }

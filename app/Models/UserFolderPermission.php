@@ -14,13 +14,13 @@ class UserFolderPermission extends Model
         'user_id', 'folder_id', 'permissions'
     ];
 
-    public function users(): BelongsTo
+    public function user(): BelongsTo
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'user_id');
     }
 
-    public function folders(): BelongsTo
+    public function folder(): BelongsTo
     {
-        return $this->belongsTo(Folder::class);
+        return $this->belongsTo(Folder::class, 'folder_id');
     }
 }
