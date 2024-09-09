@@ -126,13 +126,13 @@ class User extends Authenticatable implements JWTSubject
         return $this->belongsToMany(Instance::class, 'user_has_instances')->withTimestamps();
     }
 
-    // Tambahkan accessor untuk mengambil instansi terkait
-    public function getInstanceDataAttribute()
-    {
-        return $this->instances()->get();  // Mengambil semua instance yang terkait dengan user
-    }
+    // // Tambahkan accessor untuk mengambil instansi terkait
+    // public function getInstanceDataAttribute()
+    // {
+    //     return $this->instances()->get();  // Mengambil semua instance yang terkait dengan user
+    // }
 
-    // Append custom attribute `instance_data` ke model User
-    protected $appends = ['instance_data'];
+    // // Append custom attribute `instance_data` ke model User
+    // protected $appends = ['instance_data'];
     
 }

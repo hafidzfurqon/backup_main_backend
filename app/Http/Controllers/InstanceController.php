@@ -74,7 +74,7 @@ class InstanceController extends Controller
      * @param \Illuminate\Http\Request $request
      * @return \Illuminate\Http\JsonResponse
      */
-    public function getInstanceIdWithName(Request $request)
+    public function getInstanceWithName(Request $request)
     {
         $checkAdmin = $this->checkAdminService->checkAdmin();
 
@@ -130,7 +130,6 @@ class InstanceController extends Controller
             $request->all(),
             [
                 'name' => 'required|string|max:255|unique:instances,name',
-                'email' => 'required|string|email|max:255|unique:instances,email',
                 'address' => 'required|string|max:255',
             ]
         );
@@ -144,7 +143,6 @@ class InstanceController extends Controller
         try {
             $instance = Instance::create([
                 'name' => $request->name,
-                'email' => $request->email,
                 'address' => $request->address,
             ]);
 
@@ -187,7 +185,6 @@ class InstanceController extends Controller
             $request->all(),
             [
                 'name' => 'required|string|max:255',
-                'email' => 'required|string|email|max:255',
                 'address' => 'required|string|max:255',
             ]
         );
@@ -209,7 +206,6 @@ class InstanceController extends Controller
 
             $instance->update([
                 'name' => $request->name,
-                'email' => $request->email,
                 'address' => $request->address,
             ]);
 
@@ -277,7 +273,6 @@ class InstanceController extends Controller
 
             return response()->json([
                 'message' => 'Instansi Berhasil Dihapus',
-                'data' => $instance
             ], 200);
         } catch (\Exception $e) {
 

@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\File;
 use App\Models\Folder;
 use App\Models\Tags;
 use App\Models\User;
@@ -21,7 +20,7 @@ class FolderController extends Controller
     /**
      * Check the user permission
      */
-    private function checkPermissionFolder($folderId, $action)
+    private function checkPermissionFolder($folderId, $actions)
     {
         $user = Auth::user();
         $folder = Folder::find($folderId);
@@ -53,7 +52,14 @@ class FolderController extends Controller
         $userFolderPermission = UserFolderPermission::where('user_id', $user->id)->where('folder_id', $folder->id)->first();
         if ($userFolderPermission) {
             $checkPermission = $userFolderPermission->permissions;
-            if (in_array($action, $checkPermission)) {
+
+            // Jika $actions adalah string, ubah menjadi array agar lebih mudah diperiksa
+            if (!is_array($actions)) {
+                $actions = [$actions];
+            }
+
+            // Periksa apakah izin pengguna ada di array $actions
+            if (in_array($checkPermission, $actions)) {
                 return true;
             }
         }
@@ -135,7 +141,7 @@ class FolderController extends Controller
         }
     }
 
-    public function index(Request $request)
+    public function index()
     {
         $user = Auth::user();
 
@@ -161,7 +167,7 @@ class FolderController extends Controller
                 return response()->json([
                     'message' => 'No folders or files found',
                     'data' => [
-                        'folders' => [],
+                        'folders' => $userFolders,
                         'files' => $files
                     ]
                 ], 200);
@@ -174,7 +180,11 @@ class FolderController extends Controller
                     'name' => $folder->name,
                     'total_size' => $this->calculateFolderSize($folder), // Hitung total ukuran folder
                     'type' => $folder->type,
-                    'user_id' => $folder->user->id,
+                    'user' => [
+                        'id' => $folder->user->id,
+                        'name' =>  $folder->user->name,
+                        'email' =>  $folder->user->email
+                    ],
                     'instance' => $folder->instances->map(function ($instance) {
                         return [
                             'id' => $instance->id,
@@ -210,7 +220,9 @@ class FolderController extends Controller
 
     public function info($id)
     {
-        $permission = $this->checkPermissionFolder($id, 'folder_read');
+        // periksa apakah user memiliki izin antara read atau write
+        $permission = $this->checkPermissionFolder($id, ['read', 'write']);
+
         if (!$permission) {
             return response()->json([
                 'errors' => 'You do not have permission to access this folder.',
@@ -219,7 +231,7 @@ class FolderController extends Controller
 
         try {
             // Cari folder dengan ID yang diberikan dan sertakan subfolder jika ada
-            $folder = Folder::with(['subfolders', 'files', 'tags', 'instances'])->find($id);
+            $folder = Folder::with(['user', 'subfolders', 'files', 'tags', 'instances'])->find($id);
 
             // Jika folder tidak ditemukan, kembalikan pesan kesalahan
             if (!$folder) {
@@ -235,6 +247,11 @@ class FolderController extends Controller
                 'total_size' => $this->calculateFolderSize($folder),
                 'type' => $folder->type,
                 'parent_id' => $folder->parent_id ? $folder->parentFolder->id : null,
+                'user' => [
+                    'id' => $folder->user->id,
+                    'name' =>  $folder->user->name,
+                    'email' =>  $folder->user->email
+                ],
                 'instances' => $folder->instances->map(function ($instance) {
                     return [
                         'id' => $instance->id,
@@ -317,7 +334,7 @@ class FolderController extends Controller
                 $parentId = $folderRootUser->id;
             } else if ($request->parent_id) {
                 // check if parent_id is another user folder, then check if user login right now have the permission to edit folder on that folder. checked with checkPermission.
-                $permission = $this->checkPermissionFolder($request->parent_id, 'folder_edit');
+                $permission = $this->checkPermissionFolder($request->parent_id, 'write');
                 if (!$permission) {
                     return response()->json([
                         'errors' => 'You do not have permission to create folder in this parent_id',
@@ -339,7 +356,7 @@ class FolderController extends Controller
             $userInstance = $userData->instances->pluck('id')->toArray();  // Mengambil instance user
             $newFolder->instances()->sync($userInstance);  // Sinkronisasi instance ke folder baru
 
-            if ($request->tags) {
+            if ($request->has('tags')) {
                 // Proses tags
                 $tagIds = [];
 
@@ -366,6 +383,12 @@ class FolderController extends Controller
                 $newFolder->tags()->sync($tagIds);
             }
 
+            // Generate public path setelah folder dibuat
+            $publicPath = $this->getPublicPath($newFolder->id);
+
+            // Simpan public path ke folder baru
+            $newFolder->update(['public_path' => $publicPath]);
+
             // COMMIT JIKA TIDAK ADA ERROR
             DB::commit();
 
@@ -383,7 +406,7 @@ class FolderController extends Controller
             $newFolder['tags'] = $tagsData;
 
             // Load instances untuk dimasukkan ke dalam response
-            $newFolder->load('instances');
+            $newFolder->load('instances:id,name');
 
             return response()->json([
                 'message' => $newFolder->parent_id ? 'Subfolder created successfully' : 'Folder created successfully',
@@ -426,7 +449,7 @@ class FolderController extends Controller
         }
 
         // Periksa perizinan
-        $permissionCheck = $this->checkPermissionFolder($request->folder_id, 'folder_edit');
+        $permissionCheck = $this->checkPermissionFolder($request->folder_id, 'write');
         if (!$permissionCheck) {
             return response()->json([
                 'errors' => 'You do not have permission to add tag to this folder.',
@@ -501,7 +524,7 @@ class FolderController extends Controller
         }
 
         // Periksa perizinan
-        $permissionCheck = $this->checkPermissionFolder($request->folder_id, 'folder_edit'); // misalnya folder_edit adalah action untuk edit atau modifikasi
+        $permissionCheck = $this->checkPermissionFolder($request->folder_id, 'write'); // misalnya folder_edit adalah action untuk edit atau modifikasi
         if (!$permissionCheck) {
             return response()->json([
                 'errors' => 'You do not have permission to remove tag from this folder.',
@@ -558,7 +581,7 @@ class FolderController extends Controller
      */
     public function update(Request $request, $id)
     {
-        $permissionCheck = $this->checkPermissionFolder($id, 'folder_edit');
+        $permissionCheck = $this->checkPermissionFolder($id, 'write');
         if (!$permissionCheck) {
             return response()->json([
                 'errors' => 'You do not have permission to edit this folder.',
@@ -580,12 +603,16 @@ class FolderController extends Controller
         try {
             $folder = Folder::findOrFail($id);
 
-            // Update folder name in the database, but keep the same NanoID
             $oldNanoid = $folder->nanoid;
-            $folder->name = $request->name;
-            $folder->save();
 
-            if ($request->tags) {
+            $publicPath = $this->getPublicPath($folder->id);
+
+            $folder->update([
+                'name' => $request->name,
+                'public_path' => $publicPath
+            ]);
+
+            if ($request->has('tags')) {
                 // Process tags
                 $tags = $request->tags;
                 $tagIds = [];
@@ -616,6 +643,8 @@ class FolderController extends Controller
             if (Storage::exists($oldFullPath)) {
                 Storage::move($oldFullPath, $newFullPath);
             }
+
+            $folder->load(['user:id,name,email', 'tags', 'instances:id,name']);
 
             return response()->json([
                 'message' => 'Folder name updated successfully.',
@@ -667,7 +696,7 @@ class FolderController extends Controller
         try {
             foreach ($folderIds as $folderId) {
                 // Cek izin untuk setiap folder
-                $permissionCheck = $this->checkPermissionFolder($folderId, 'folder_delete');
+                $permissionCheck = $this->checkPermissionFolder($folderId, 'write');
                 if (!$permissionCheck) {
                     Log::error('Some users was trying to delete one of the selected folders that not have permission: ' . $folderId);
                     return response()->json([
@@ -726,7 +755,7 @@ class FolderController extends Controller
     {
         $user = Auth::user();
 
-        $permissionCheck = $this->checkPermissionFolder($request->folder_id, 'folder_edit');
+        $permissionCheck = $this->checkPermissionFolder($request->folder_id, 'write');
         if (!$permissionCheck) {
             return response()->json([
                 'errors' => 'You do not have permission to move this folder.',
@@ -749,11 +778,15 @@ class FolderController extends Controller
 
         try {
             $folder = Folder::findOrFail($request->folder_id);
+
             $oldParentId = $folder->parent_id;
+
             //periksa apakah new_parent_id (folder tujuan yang dipilih) pada request adalah milik user sendiri atau milik user lain. jika dimiliki oleh user lain, periksa apakah user saat ini memiliki izin untuk memindahkan ke folder milik orang lain itu.
             $checkIfNewParentIdIsBelongsToUser = Folder::where('id', $request->new_parent_id)->where('user_id', $user->id)->exists();
+
+            // jika tidak ada izin pada folder tujuan
             if (!$checkIfNewParentIdIsBelongsToUser) {
-                $permissionCheck = $this->checkPermissionFolder($request->new_parent_id, 'folder_edit');
+                $permissionCheck = $this->checkPermissionFolder($request->new_parent_id, 'write');
                 if (!$permissionCheck) {
                     return response()->json([
                         'errors' => 'You do not have permission on the folder you are trying to move this folder to.',
@@ -773,6 +806,8 @@ class FolderController extends Controller
             if (Storage::exists($oldFullPath)) {
                 Storage::move($oldFullPath, $newFullPath);
             }
+
+            $folder->load(['user:id,name,email', 'tags', 'instances:id,name']);
 
             return response()->json([
                 'message' => 'Folder moved successfully.',
@@ -819,8 +854,33 @@ class FolderController extends Controller
 
     /**
      * Get full path of folder and subfolder.
-     * return json
+     * 
      */
+    public function getPublicPath($id)
+    {
+        try {
+            $folder = Folder::findOrFail($id);
+            $path = [];
+
+            while ($folder) {
+                array_unshift($path, $folder->name);
+                $folder = $folder->parentFolder;
+            }
+
+            return implode('/', $path);
+        } catch (Exception $e) {
+            Log::error('Error occurred on getting folder path: ' . $e->getMessage(), [
+                'folder_id' => $id,
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'errors' => 'An error occurred on getting folder path.',
+            ], 500);
+        }
+    }
+
+    // Untuk API path
     public function getFullPath($id)
     {
         try {
@@ -832,10 +892,10 @@ class FolderController extends Controller
                 $folder = $folder->parentFolder;
             }
 
+            $pathReady = implode('/', $path);
+
             return response()->json([
-                'data' => [
-                    'folder_path' => implode('/', $path)
-                ]
+                'full_path' => $pathReady
             ], 200);
         } catch (Exception $e) {
             Log::error('Error occurred on getting folder path: ' . $e->getMessage(), [

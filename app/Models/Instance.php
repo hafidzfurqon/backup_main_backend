@@ -12,7 +12,10 @@ class Instance extends Model
 
     protected $table = 'instances';
 
+    protected $hidden = ['pivot'];
+
     protected $fillable = ['name', 'address'];
+    
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'user_has_instances');

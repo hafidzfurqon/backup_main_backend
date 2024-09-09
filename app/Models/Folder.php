@@ -3,10 +3,12 @@
 namespace App\Models;
 
 use App\Casts\HashId;
+use Exception;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Support\Facades\Log;
 
 class Folder extends Model
 {
@@ -16,6 +18,7 @@ class Folder extends Model
         'nanoid',
         'name',
         'type',
+        'public_path',
         'user_id',
         'parent_id'
     ];
@@ -33,12 +36,38 @@ class Folder extends Model
             if (empty($model->type)) {
                 $model->type = 'folder';
             };
+
+            // Generate the public_path before the folder is saved to the database
+            if (empty($model->public_path)) {
+                $model->public_path = $model->generatePublicPath();
+            }
         });
     }
 
     public static function generateNanoId($size = 21)
     {
         return (new \Hidehalo\Nanoid\Client())->generateId($size);
+    }
+
+    // Generate the public path based on the folder structure (parent)
+    public function generatePublicPath()
+    {
+        $path = [];
+
+        // If the folder has a parent, build the path from the parent's public_path
+        if ($this->parent_id) {
+            $parentFolder = Folder::find($this->parent_id);
+
+            if ($parentFolder) {
+                $path[] = $parentFolder->public_path;  // Append parent's public_path
+            }
+        }
+
+        // Append the current folder's name to the path
+        $path[] = $this->name;
+
+        // Return the constructed path
+        return implode('/', $path);
     }
 
     public function files()
@@ -72,9 +101,9 @@ class Folder extends Model
         return $this->belongsToMany(Tags::class, 'folder_has_tags')->withTimestamps(); // menggunakan tabel pivot untuk menyalakan otomatisasi timestamp().
     }
 
-     // Relasi many-to-many dengan InstanceModel
-     public function instances(): BelongsToMany
-     {
-         return $this->belongsToMany(Instance::class, 'folder_has_instances')->withTimestamps(); // menggunakan tabel pivot untuk menyalakan otomatisasi timestamp().
-     }
+    // Relasi many-to-many dengan InstanceModel
+    public function instances(): BelongsToMany
+    {
+        return $this->belongsToMany(Instance::class, 'folder_has_instances')->withTimestamps(); // menggunakan tabel pivot untuk menyalakan otomatisasi timestamp().
+    }
 }

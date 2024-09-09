@@ -16,6 +16,7 @@ return new class extends Migration
             $table->string('name');
             $table->string('nanoid');
             $table->string('path');
+            $table->string('public_path');
             $table->unsignedBigInteger('size');
             $table->string('type');
             $table->foreignId('user_id')->references('id')->on('users')->cascadeOnDelete();

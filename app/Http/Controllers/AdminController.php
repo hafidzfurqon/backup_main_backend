@@ -8,26 +8,43 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use App\Models\User;
+use App\Services\CheckAdminService;
 use Exception;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 
 class AdminController extends Controller
 {
+    protected $checkAdminService;
+
+    // Inject RoleService ke dalam constructor
+    public function __construct(CheckAdminService $checkAdminService)
+    {
+        $this->checkAdminService = $checkAdminService;
+    }
+
     // Informasi tentang akun Admin yang sedang login saat ini
     public function index()
     {
         $user = Auth::user();
 
-        if (!($user->hasRole('admin') && $user->is_superadmin == 1)) {
+        $checkAdmin = $this->checkAdminService->checkAdmin();
+
+        if (!$checkAdmin) {
             return response()->json([
-                'error' => 'Anda tidak di izinkan untuk mengupdate user.',
+                'errors' => 'You are not allowed to perform this action.'
             ], 403);
         }
 
         try {
 
-            $admin = User::where('id', $user->id)->first();
+            $admin = User::where('id', $user->id)->with(['instances:id,name,address'])->first();
+
+            $admin['role'] = $admin->roles->pluck('name');
+
+            // Sembunyikan relasi roles dari hasil response
+            $admin->makeHidden('roles');
 
             return response()->json([
                 'data' => $admin
@@ -35,7 +52,7 @@ class AdminController extends Controller
         } catch (Exception $e) {
             Log::error('Error occurred on getting admin information: ' . $e->getMessage());
             return response()->json([
-                'errors' => 'Terjadi kesalahan ketika mengambil data tentang admin.',
+                'errors' => 'An error occured on getting admin information.',
             ], 500);
         }
     }
@@ -44,35 +61,65 @@ class AdminController extends Controller
     {
         $user = Auth::user();
 
-        // Perbaikan logika pada otorisasi: Superadmin atau admin bisa mengakses
-        if (!($user->hasRole('admin') ||  ($user->hasRole('admin') && $user->is_superadmin == 1))) {
+        $checkAdmin = $this->checkAdminService->checkAdmin();
+
+        if (!$checkAdmin) {
             return response()->json([
-                'error' => 'Anda tidak diizinkan untuk melakukan tindakan ini.',
+                'errors' => 'You are not allowed to perform this action.'
             ], 403);
         }
 
         try {
             // Cari data berdasarkan Nama User
             if ($request->query('name')) {
+
                 $keywordName = $request->query('name');
-                $allUser = User::where('name', 'like', '%' . $keywordName . '%')->paginate(10);
+
+                $allUser = User::where('name', 'like', '%' . $keywordName . '%')->with('instances:id,name,address')->paginate(10);
+
+                $allUser['role'] = $allUser->roles->pluck('name');
+
+                // Sembunyikan relasi roles dari hasil response
+                $allUser->makeHidden('roles');
+
                 return response()->json($allUser, 200);  // Kembalikan hasil pagination tanpa membungkus lagi
             }
             // Cari data berdasarkan Email User
             else if ($request->query('email')) {
+
                 $keywordEmail = $request->query('email');
-                $allUser = User::where('email', 'like', '%' . $keywordEmail . '%')->paginate(10);
+
+                $allUser = User::where('email', 'like', '%' . $keywordEmail . '%')->with('instances:id,name,address')->paginate(10);
+
+                $allUser['role'] = $allUser->roles->pluck('name');
+
+                // Sembunyikan relasi roles dari hasil response
+                $allUser->makeHidden('roles');
+
                 return response()->json($allUser, 200);  // Kembalikan hasil pagination tanpa membungkus lagi
             } else {
                 // Mengambil semua data pengguna dengan pagination
-                $allUser = User::paginate(10);
+                $allUser = User::with('instances:id,name,address', 'roles')->paginate(10);
+
+                // Iterasi setiap user dalam koleksi paginasi dan lakukan transformasi
+                $allUser->getCollection()->transform(function ($user) {
+                    // Ambil hanya nama role
+                    $user['role'] = $user->roles->pluck('name');
+
+                    // Sembunyikan relasi roles
+                    $user->makeHidden('roles');
+
+                    return $user;
+                });
+
+
                 return response()->json($allUser, 200);  // Kembalikan hasil pagination tanpa membungkus lagi
             }
         } catch (\Exception $e) {
-            Log::error("Terjadi kesalahan ketika mengambil data user: " . $e->getMessage());
+            Log::error("Error occurred on getting user list: " . $e->getMessage());
 
             return response()->json([
-                'errors' => 'Terjadi kesalahan ketika mengambil data user.',
+                'errors' => 'An error occurred on getting user list.',
             ], 500);
         }
     }
@@ -82,15 +129,22 @@ class AdminController extends Controller
     {
         $user = Auth::user();
 
-        if (!($user->hasRole('admin') && $user->is_superadmin == 1)) {
+        $checkAdmin = $this->checkAdminService->checkAdmin();
+
+        if (!$checkAdmin) {
             return response()->json([
-                'error' => 'Anda tidak di izinkan untuk melakukan tindakan ini.',
+                'errors' => 'You are not allowed to perform this action.'
             ], 403);
         }
 
         try {
 
-            $user = User::where('id', $id)->first();
+            $user = User::where('id', $id)->with('instances:id,name,address')->first();
+
+            $user['role'] = $user->roles->pluck('name');
+
+            // Sembunyikan relasi roles dari hasil response
+            $user->makeHidden('roles');
 
             return response()->json([
                 'data' => $user
@@ -98,18 +152,18 @@ class AdminController extends Controller
         } catch (Exception $e) {
             Log::error('Error occurred on getting user information: ' . $e->getMessage());
             return response()->json([
-                'errors' => 'Terjadi kesalahan ketika mengambil data user.',
+                'errors' => 'An error occured on getting user information.',
             ], 500);
         }
     }
 
     public function createUserFromAdmin(Request $request)
     {
-        $user = Auth::user();
+        $checkAdmin = $this->checkAdminService->checkAdmin();
 
-        if (!($user->hasRole('admin') && $user->is_superadmin == 1)) {
+        if (!$checkAdmin) {
             return response()->json([
-                'error' => 'Anda tidak di izinkan untuk mengupdate user.',
+                'errors' => 'You are not allowed to perform this action.'
             ], 403);
         }
 
@@ -122,7 +176,7 @@ class AdminController extends Controller
                 function ($attribute, $value, $fail) {
                     // Validasi format email menggunakan Laravel's 'email' rule
                     if (!preg_match('/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,})+$/', $value)) {
-                        $fail('Format email tidak valid.');
+                        $fail('Invalid email format.');
                     }
 
                     // Daftar domain yang valid
@@ -145,7 +199,7 @@ class AdminController extends Controller
 
                     // Periksa apakah domain email diizinkan
                     if (!in_array($domain, $allowedDomains)) {
-                        $fail('Domain email tidak valid.');
+                        $fail('Invalid email domain.');
                     }
                 },
             ],
@@ -175,8 +229,15 @@ class AdminController extends Controller
 
             DB::commit();
 
+            $newUser->load('instances:id,name,address');
+
+            $newUser['role'] = $newUser->roles->pluck('name');
+
+            // Sembunyikan relasi roles dari hasil response
+            $newUser->makeHidden('roles');
+
             return response()->json([
-                'message' => 'User berhasil ditambahkan',
+                'message' => 'User created successfully.',
                 'data' => $newUser
             ], 201);
         } catch (Exception $e) {
@@ -184,18 +245,18 @@ class AdminController extends Controller
 
             Log::error('Error occurred on adding user: ' . $e->getMessage());
             return response()->json([
-                'errors' => 'Terjadi kesalahan ketika menambahkan user.',
+                'errors' => 'An error occurred on adding user.',
             ], 500);
         }
     }
 
     public function updateUserFromAdmin(Request $request, $userIdToBeUpdated)
     {
-        $user = Auth::user();
+        $checkAdmin = $this->checkAdminService->checkAdmin();
 
-        if (!($user->hasRole('admin') && $user->is_superadmin == 1)) {
+        if (!$checkAdmin) {
             return response()->json([
-                'error' => 'Anda tidak di izinkan untuk mengupdate user.',
+                'errors' => 'You are not allowed to perform this action.'
             ], 403);
         }
 
@@ -204,11 +265,10 @@ class AdminController extends Controller
             'email' => [
                 'required',
                 'email',
-                'unique:users,email', // Menentukan kolom yang dicek di tabel users
-                function ($attribute, $value, $fail) {
+                function ($attribute, $value, $fail) use ($request) {
                     // Validasi format email menggunakan Laravel's 'email' rule
                     if (!preg_match('/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,})+$/', $value)) {
-                        $fail('Format email tidak valid.');
+                        $fail('Invalid email format.');
                     }
 
                     // Daftar domain yang valid
@@ -231,9 +291,11 @@ class AdminController extends Controller
 
                     // Periksa apakah domain email diizinkan
                     if (!in_array($domain, $allowedDomains)) {
-                        $fail('Domain email tidak valid.');
+                        $fail('Invalid email domain.');
                     }
                 },
+                // Validasi unique email kecuali email yang sudah ada (email saat ini)
+                Rule::unique('users', 'email')->ignore($userIdToBeUpdated)
             ],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
             'instance_id' => ['required', 'integer', 'exists:instances,id'],
@@ -245,16 +307,22 @@ class AdminController extends Controller
             ], 422);
         }
 
-        DB::beginTransaction();
-
         try {
             $userToBeUpdated = User::where('id', $userIdToBeUpdated)->first();
 
             if (!$userToBeUpdated) {
                 return response()->json([
-                    'errors' => 'User tidak ditemukan.'
+                    'errors' => 'User not found.'
                 ], 404);
             }
+
+            if ($userToBeUpdated->is_superadmin == 1) {
+                return response()->json([
+                    'errors' => 'You are not allowed to update superadmin user.',
+                ], 403);
+            }
+
+            DB::beginTransaction();
 
             $userToBeUpdated->update([
                 'name' => $request->name,
@@ -275,8 +343,15 @@ class AdminController extends Controller
 
             DB::commit();
 
+            $userToBeUpdated->load('instances:id,name,address');
+
+            $userToBeUpdated['role'] = $userToBeUpdated->roles->pluck('name');
+
+            // Sembunyikan relasi roles dari hasil response
+            $userToBeUpdated->makeHidden('roles');
+
             return response()->json([
-                'message' => 'User berhasil diupdate',
+                'message' => 'User updated successfully.',
                 'data' => $userToBeUpdated
             ], 200);
         } catch (Exception $e) {
@@ -284,7 +359,7 @@ class AdminController extends Controller
 
             Log::error('Error occurred on updating user: ' . $e->getMessage());
             return response()->json([
-                'errors' => 'Terjadi kesalahan ketika mengupdate user.',
+                'errors' => 'An error occured on updating user.',
             ], 500);
         }
     }
@@ -300,16 +375,19 @@ class AdminController extends Controller
      */
     public function deleteUserFromAdmin($userIdToBeDeleted)
     {
-        $user = Auth::user();
+        $checkAdmin = $this->checkAdminService->checkAdmin();
 
-        // Check if the user has the required permission to delete users.
-        if (!($user->hasRole('admin') && $user->is_superadmin == 1)) {
+        if (!$checkAdmin) {
             return response()->json([
-                'error' => 'Anda tidak diizinkan untuk menghapus user.',
+                'errors' => 'You are not allowed to perform this action.'
             ], 403);
         }
 
-        DB::beginTransaction();
+        // if ($user->id == $userIdToBeDeleted) {
+        //     return response()->json([
+        //         'errors' => 'Anda tidak diizinkan untuk menghapus diri sendiri.',
+        //     ], 403);
+        // }
 
         try {
             // Delete the user from the database.
@@ -317,9 +395,17 @@ class AdminController extends Controller
 
             if (!$userData) {
                 return response()->json([
-                    'errors' => 'User tidak ditemukan.'
+                    'errors' => 'User not found.'
                 ], 404);
             }
+
+            if ($userData->is_superadmin == 1) {
+                return response()->json([
+                    'errors' => 'You are not allowed to delete superadmin user.',
+                ], 403);
+            }
+
+            DB::beginTransaction();
 
             // Hapus folder dan file terkait dari local storage
             $folders = Folder::where('user_id', $userData->id)->get();
@@ -333,7 +419,7 @@ class AdminController extends Controller
             DB::commit();
 
             return response()->json([
-                'message' => 'User berhasil dihapus'
+                'message' => 'User deleted successfully.',
             ], 200);
         } catch (Exception $e) {
             DB::rollBack();
@@ -341,7 +427,7 @@ class AdminController extends Controller
             // Log the error if an exception occurs.
             Log::error('Error occurred on deleting user: ' . $e->getMessage() . ' | Trace: ' . $e->getTraceAsString());
             return response()->json([
-                'errors' => 'Terjadi kesalahan ketika menghapus user.',
+                'errors' => 'An error occured on deleting user.',
             ], 500);
         }
     }
@@ -407,5 +493,23 @@ class AdminController extends Controller
             // Lemparkan kembali exception agar dapat ditangani di tingkat pemanggil
             throw $e;
         }
+    }
+
+    /**
+     * Get folder path based on parent folder id.
+     */
+    private function getFolderPath($parentId)
+    {
+        if ($parentId === null) {
+            return ''; // Root directory, no need for 'folders' base path
+        }
+
+        $parentFolder = Folder::findOrFail($parentId);
+        $path = $this->getFolderPath($parentFolder->parent_id);
+
+        // Use the folder's NanoID in the storage path
+        $folderNameWithNanoId = $parentFolder->nanoid;
+
+        return $path . '/' . $folderNameWithNanoId;
     }
 }
