@@ -361,6 +361,7 @@ class FileController extends Controller
                     'files' => $file,
                 ],
             ], 201);
+            
         } catch (Exception $e) {
             // ROLLBACK TRANSACTION JIKA ADA KESALAHAN
             DB::rollBack();

@@ -19,14 +19,13 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => ['http://localhost:3032', 'http://localhost:3033', 'http://localhost:5173', 'http://localhost:5174', 'http://127.0.0.1:3032', 'http://127.0.0.1:8000'],
+    'allowed_origins' => ['http://localhost:3032'],
 
     'allowed_origins_patterns' => [],
 
-    // Explicitly allow Content-Type and other common headers
-    'allowed_headers' => ['Content-Type', 'X-Requested-With', 'Authorization', 'Accept', 'Origin', 'Cache-Control', 'X-CSRF-Token', 'multipart/form-data', '*'],
+    'allowed_headers' => ['*'],
 
-    'exposed_headers' => [],
+    'exposed_headers' => [''],
 
     'max_age' => 0,
 

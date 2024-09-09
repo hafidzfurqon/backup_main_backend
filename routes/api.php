@@ -12,9 +12,6 @@ use App\Http\Controllers\TagController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
-Route::options('{any}', function() {
-        return response('', 204);
-    })->where('any', '.*');    
 
 // Route::post('/register', [UserController::class, 'register']); // Register user baru (bukan melalui admin)
 Route::post('/login', [AuthController::class, 'login']); // login user
@@ -26,10 +23,6 @@ Route::post('/checkTokenValid', [AuthController::class, 'checkTokenValid']); // 
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:api');  // logout user
 
 Route::middleware(['auth:api', 'remove_nanoid', 'protectRootFolder', 'check_admin', 'hide_superadmin_flag'])->group(function () {
-
-    Route::options('{any}', function() {
-        return response('', 204);
-    })->where('any', '.*');    
 
     Route::prefix('user')->group(function () {
         Route::get('/index', [UserController::class, 'index']); // Mendapatkan informasi user
@@ -90,11 +83,7 @@ Route::middleware(['auth:api', 'remove_nanoid', 'protectRootFolder', 'check_admi
 
 
 // ROUTE KHUSUS UNTUK ADMIN
-Route::prefix('admin')->middleware(['auth:api', 'validate_admin'])->group(function () {
-
-    Route::options('{any}', function() {
-        return response('', 204);
-    })->where('any', '.*');    
+Route::prefix('admin')->middleware(['auth:api', 'validate_admin'])->group(function () {  
 
     Route::get('/index', [AdminController::class, 'index']); // dapatkan informasi tentang akun admin yang sedang login saat ini.
 
