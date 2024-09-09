@@ -44,7 +44,7 @@ class FileController extends Controller
         if ($user->hasRole('admin') && $user->is_superadmin == 1) {
             return true;
         }
-        // jika hanya admin dan tidak ada privilege SUPERADMIN, kembalikan false (tidak diizinkan) 
+        // jika hanya admin dan tidak ada privilege SUPERADMIN, kembalikan false (tidak diizinkan)
         else if ($user->hasRole('admin')) {
             return false;
         }
@@ -55,9 +55,9 @@ class FileController extends Controller
         $userFilePermission = UserFilePermission::where('user_id', $user->id)->where('file_id', $file->id)->first();
         if ($userFilePermission) {
             $checkPermission = $userFilePermission->permissions;
-           
-             // Jika $actions adalah string, ubah menjadi array agar lebih mudah diperiksa
-             if (!is_array($actions)) {
+
+            // Jika $actions adalah string, ubah menjadi array agar lebih mudah diperiksa
+            if (!is_array($actions)) {
                 $actions = [$actions];
             }
 
@@ -74,7 +74,7 @@ class FileController extends Controller
             if ($folderPermission) {
                 $checkPermission = $folderPermission->permissions;
 
-                if(!is_array($actions)){
+                if (!is_array($actions)) {
                     $actions = [$actions];
                 }
 
@@ -112,7 +112,7 @@ class FileController extends Controller
         if ($user->hasRole('admin') && $user->is_superadmin == 1) {
             return true;
         }
-        // jika hanya admin dan tidak ada privilege SUPERADMIN, kembalikan false (tidak diizinkan) 
+        // jika hanya admin dan tidak ada privilege SUPERADMIN, kembalikan false (tidak diizinkan)
         else if ($user->hasRole('admin')) {
             return false;
         }
@@ -145,7 +145,10 @@ class FileController extends Controller
         }
 
         try {
-            $file = File::with(['user:id,name,email', 'tags', 'instances:id,name'
+            $file = File::with([
+                'user:id,name,email',
+                'tags',
+                'instances:id,name'
             ])->find($id);
 
             if (!$file) {

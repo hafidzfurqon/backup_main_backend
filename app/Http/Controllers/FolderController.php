@@ -859,7 +859,7 @@ class FolderController extends Controller
 
     /**
      * Get full path of folder and subfolder.
-     * 
+     *
      */
     public function getPublicPath($id)
     {
