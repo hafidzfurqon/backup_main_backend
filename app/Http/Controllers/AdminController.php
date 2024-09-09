@@ -291,11 +291,11 @@ class AdminController extends Controller
 
     /**
      * Delete a user from admin (DELETE).
-     * 
+     *
      * This function is DANGEROUS and should be used with caution.
-     * 
+     *
      * @param int $userIdToBeDeleted The ID of the user to be deleted.
-     * 
+     *
      * @return \Illuminate\Http\JsonResponse
      */
     public function deleteUserFromAdmin($userIdToBeDeleted)

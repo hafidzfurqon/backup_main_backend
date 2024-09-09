@@ -17,14 +17,15 @@ return [
 
     'paths' => ['api/*', 'sanctum/csrf-cookie'],
 
-    'allowed_methods' => ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    'allowed_methods' => ['*'],
 
-    'allowed_origins' => ['http://127.0.0.1:8000', 'http://localhost:5173', 'http://localhost:3032'],
+    'allowed_origins' => ['*'],
 
     // Menggunakan REGEX untuk pola pattern localhost dengan segala macam portnya :(
-    'allowed_origins_patterns' => ['^http://localhost:\d+$'],
+    'allowed_origins_patterns' => [],
 
     'allowed_headers' => ['*'],
+
 
     'exposed_headers' => [],
 

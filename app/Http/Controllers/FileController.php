@@ -232,7 +232,7 @@ class FileController extends Controller
                 'data' => [
                     'files' => $filesData,
                 ],
-            ], 201);
+            ], 201)->header('Access-Control-Allow-Origin', '*');
         } catch (Exception $e) {
             // ROLLBACK TRANSACTION JIKA ADA KESALAHAN
             DB::rollBack();
@@ -313,7 +313,7 @@ class FileController extends Controller
 
     /**
      * Delete a file (DELETE).
-     * DANGEROUS! 
+     * DANGEROUS!
      */
     public function delete(Request $request)
     {
