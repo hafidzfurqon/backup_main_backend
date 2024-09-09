@@ -73,7 +73,7 @@ class TagController extends Controller
 
             $tagData = Tags::where('id', $id)->first();
 
-            if(!$tagData){
+            if (!$tagData) {
                 return response()->json([
                     'errors' => 'Tag not found.'
                 ]);
@@ -82,7 +82,6 @@ class TagController extends Controller
             return response()->json([
                 'data' => $tagData
             ]);
-            
         } catch (\Exception $e) {
             Log::error('Error occured while fetching tag data: ' . $e->getMessage());
             return response()->json([
@@ -223,12 +222,11 @@ class TagController extends Controller
         DB::beginTransaction();
 
         try {
-            foreach ($tagIds as $tag_id) {
+            $tags = Tags::whereIn('id', $tagIds)->get();
 
-                $tag = Tags::find($tag_id);
-
-                 // Cek apakah ada data pivot untuk folders
-                 if ($tag->folders()->exists()) {
+            foreach($tags as $tag){
+                // Cek apakah ada data pivot untuk folders
+                if ($tag->folders()->exists()) {
                     $tag->folders()->detach(); // Hapus relasi folder jika ada
                 }
 

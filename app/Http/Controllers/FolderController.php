@@ -720,8 +720,14 @@ class FolderController extends Controller
 
             // Hapus data pivot yang terkait dengan setiap folder
             foreach ($folders as $folder) {
-                $folder->tags()->detach();
-                $folder->instances()->detach();
+
+                if($folder->tags()->exists()){
+                    $folder->tags()->detach();
+                }
+
+                if($folder->instances()->exists()){
+                    $folder->instances()->detach();
+                }
 
                 // Hapus folder dari database
                 $folder->delete();

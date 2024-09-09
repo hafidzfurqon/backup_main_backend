@@ -263,7 +263,23 @@ class InstanceController extends Controller
         try {
 
             // Gunakan whereIn untuk efisiensi dan menghapus dalam satu query
-            Instance::whereIn('id', $instanceIds)->delete();
+            $instances = Instance::whereIn('id', $instanceIds)->get();
+
+            foreach($instances as $instance){
+                if($instance->users()->exists()){
+                    $instance->users()->detach();
+                }
+
+                if($instance->folders()->exists()){
+                    $instance->folders()->detach();
+                }
+
+                if($instance->files()->exists()){
+                    $instance->files()->detach();
+                }
+
+                $instance->delete();
+            }
 
             DB::commit();
 
