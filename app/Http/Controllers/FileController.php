@@ -303,6 +303,31 @@ class FileController extends Controller
                 $filesData[] = $file;
             }
 
+            // Pindahkan file yang telah discan ke storage utama
+            $path = $this->generateFilePath($folderId, $storageFileName);
+            Storage::put($path, file_get_contents($tempPath));
+
+            // Ambil ukuran file dari storage utama
+            $fileSize = Storage::size($path);
+
+            Log::info("File Temp: " . $tempPath);
+
+            // Hapus file sementara setelah dipindahkan
+            if (file_exists($tempPath)) {
+                unlink($tempPath);
+            }
+
+            // Buat catatan file di database
+            $file = File::create([
+                'name' => $originalFileName,
+                'path' => $path,
+                'size' => $fileSize,
+                'mime_type' => 'png', // MIME type yang sudah diambil sebelumnya
+                'user_id' => $user->id,
+                'folder_id' => $folderId,
+                'nanoid' => $nanoid,
+            ]);
+
             // COMMIT TRANSACTION JIKA TIDAK ADA ERROR
             DB::commit();
 
