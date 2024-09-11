@@ -744,25 +744,42 @@ class FileController extends Controller
         DB::beginTransaction();
 
         try {
-            foreach ($fileIds as $fileId) {
 
-                $file = File::findOrFail($fileId);
+            $files = File::whereIn('id', $fileIds);
 
-                // Delete file from storage
-                if (Storage::exists($file->path)) {
-                    Storage::delete($file->path);
+            foreach ($files as $file) {
+                if (!$this->checkPermissionFile($file->id, 'write')) {
+                    $noPermissionFile[] = $file->id;
+                }
+            }
+
+            // Jika ada folder yang tidak memiliki izin
+            if (!empty($noPermissionFile)) {
+                Log::error('User attempted to delete file without permission: ' . implode(', ', $noPermissionFile));
+                return response()->json([
+                    'errors' => 'You do not have permission to delete some of the selected file.',
+                ], 403);
+            }
+
+            foreach ($files as $file) {
+                if ($file->tags()->exists()) {
+                    $file->tags()->detach();
                 }
 
-                // Hapus data pivot yang terkait dengan file (tags dan instances)
-                $file->tags()->detach(); // Menghapus semua data pivot pada tabel file_has_tags
-                $file->instances()->detach(); // Menghapus semua data pivot pada tabel file_has_instances
+                if ($file->instances()->exists()) {
+                    $file->instances()->detach();
+                }
 
-
-                // Delete file from database
                 $file->delete();
             }
 
             DB::commit();
+
+            foreach ($files as $file) {
+                if (Storage::exists($file->path)) {
+                    Storage::delete($file->path);
+                }
+            }
 
             return response()->json([
                 'message' => 'File(s) deleted successfully.',

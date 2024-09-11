@@ -683,7 +683,7 @@ class FolderController extends Controller
      */
     public function delete(Request $request)
     {
-        // Jika tidak ada $id, validasi bahwa folder_ids dikirim dalam request
+        // Validasi bahwa folder_ids dikirim dalam request
         $validator = Validator::make($request->all(), [
             'folder_ids' => 'required|array',
             'folder_ids.*' => 'integer|exists:folders,id',
@@ -693,33 +693,50 @@ class FolderController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        // Ambil daftar folder_ids dari request
         $folderIds = $request->folder_ids;
 
         DB::beginTransaction();
 
         try {
-            foreach ($folderIds as $folderId) {
-                // Cek izin untuk setiap folder
-                $permissionCheck = $this->checkPermissionFolder($folderId, 'write');
-                if (!$permissionCheck) {
-                    Log::error('Some users was trying to delete one of the selected folders that not have permission: ' . $folderId);
-                    return response()->json([
-                        'errors' => 'You do not have permission to delete one of the selected folders.',
-                    ], 403);
+            // Ambil semua folder yang sesuai
+            $folders = Folder::whereIn('id', $folderIds)->get();
+
+            // Cek izin untuk semua folder
+            $noPermissionFolders = [];
+
+            foreach ($folders as $folder) {
+                if (!$this->checkPermissionFolder($folder->id, 'write')) {
+                    $noPermissionFolders[] = $folder->id;
+                }
+            }
+
+            // Jika ada folder yang tidak memiliki izin
+            if (!empty($noPermissionFolders)) {
+                Log::error('User attempted to delete folders without permission: ' . implode(', ', $noPermissionFolders));
+                return response()->json([
+                    'errors' => 'You do not have permission to delete some of the selected folders.',
+                ], 403);
+            }
+
+            // Hapus data pivot yang terkait dengan setiap folder
+            foreach ($folders as $folder) {
+
+                if($folder->tags()->exists()){
+                    $folder->tags()->detach();
                 }
 
-                // Temukan folder berdasarkan ID
-                $folder = Folder::findOrFail($folderId);
-
-                // Hapus data pivot yang terkait dengan folder (tags dan instances)
-                $folder->tags()->detach(); // Menghapus semua data pivot pada tabel folder_has_tags
-                $folder->instances()->detach(); // Menghapus semua data pivot pada tabel folder_has_instances
+                if($folder->instances()->exists()){
+                    $folder->instances()->detach();
+                }
 
                 // Hapus folder dari database
                 $folder->delete();
+            }
 
-                // Hapus folder dari storage
+            DB::commit();
+
+            // Hapus folder dari storage setelah commit ke database berhasil
+            foreach ($folders as $folder) {
                 $path = $this->getFolderPath($folder->parent_id);
                 $fullPath = $path . '/' . $folder->nanoid;
 
@@ -728,11 +745,8 @@ class FolderController extends Controller
                 }
             }
 
-            DB::commit();
-
             return response()->json([
                 'message' => 'Folder(s) deleted successfully.',
-                'data' => []
             ], 200);
         } catch (ModelNotFoundException $e) {
             DB::rollBack();
